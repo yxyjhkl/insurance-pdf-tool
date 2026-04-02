@@ -1,8 +1,7 @@
-import React, { useState, useCallback } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Dimensions, Share } from 'react-native';
+import React, { useState } from 'react';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Share, BackHandler } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
-import * as ImagePicker from 'expo-image-picker';
 import { StatusBar } from 'expo-status-bar';
 
 interface DataRow {
@@ -100,9 +99,53 @@ export default function App() {
     return year >= 11 ? '3.80%' : '--';
   };
 
+  const exportToExcel = () => {
+    if (data.length === 0) {
+      Alert.alert('提示', '请先导入PDF');
+      return;
+    }
+    
+    let csvContent = '保单年度,被保险人年龄,期交保费,累计保费,保证利益,当年分红,累计分红,身故总利益,生存总利益,预期增长率,演示增长率\n';
+    
+    data.forEach(row => {
+      const demoRate = row.policy_year >= 11 ? '3.80%' : '--';
+      const growthRate = row.growth_rate ? (row.growth_rate * 100).toFixed(2) + '%' : '--';
+      csvContent += `${row.policy_year},${row.age},${row.premium},${row.total_premium},${row.guaranteed},${row.current_dividend},${row.accum_dividend},${row.death_benefit},${row.survival_benefit},${growthRate},${demoRate}\n`;
+    });
+
+    const fileName = `金尊分红建议书_${new Date().getTime()}.csv`;
+    const filePath = FileSystem.documentDirectory + fileName;
+    
+    FileSystem.writeAsStringAsync(filePath, csvContent, {
+      encoding: FileSystem.EncodingType.UTF8,
+    }).then(() => {
+      Alert.alert('导出成功', `文件已保存到: ${fileName}`, [
+        { text: '分享', onPress: () => Share.share({ message: filePath, url: filePath }) },
+        { text: '确定' }
+      ]);
+    }).catch(() => {
+      Alert.alert('导出失败', '无法保存文件');
+    });
+  };
+
+  const handleExit = () => {
+    Alert.alert('退出确认', '确定要退出应用吗？', [
+      { text: '取消', style: 'cancel' },
+      { text: '退出', style: 'destructive', onPress: () => BackHandler.exitApp() }
+    ]);
+  };
+
+  const generateScreenshot = () => {
+    if (data.length === 0) {
+      Alert.alert('提示', '请先导入PDF');
+      return;
+    }
+    Alert.alert('提示', '截图功能需要专业截图工具，请使用手机自带的截图功能');
+  };
+
   return (
     <View style={styles.container}>
-      <StatusBar style="dark" />
+      <StatusBar style="light" />
       <View style={styles.header}>
         <Text style={styles.title}>金尊分红司庆版简版建议书</Text>
         <Text style={styles.subtitle}>将PDF建议书转换为表格 分红实现率自由调整</Text>
@@ -110,12 +153,15 @@ export default function App() {
 
       <View style={styles.actionRow}>
         <TouchableOpacity style={styles.btnOrange} onPress={handlePickPdf}>
-          <Text style={styles.btnText}>📁 导入PDF</Text>
+          <Text style={styles.btnText}>导入PDF</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.btnPurple} onPress={() => adjustDividend(dividendRate + 0.1)}>
-          <Text style={styles.btnText}>调整分红</Text>
+        <TouchableOpacity style={styles.btnBlue} onPress={() => adjustDividend(dividendRate + 0.1)}>
+          <Text style={styles.btnText}>+分红</Text>
         </TouchableOpacity>
-        <Text style={styles.rateText}>当前: {dividendRate.toFixed(1)}x</Text>
+        <TouchableOpacity style={styles.btnBlue} onPress={() => adjustDividend(Math.max(0.1, dividendRate - 0.1))}>
+          <Text style={styles.btnText}>-分红</Text>
+        </TouchableOpacity>
+        <Text style={styles.rateText}>{dividendRate.toFixed(1)}x</Text>
       </View>
 
       {loading ? (
@@ -165,6 +211,18 @@ export default function App() {
         </View>
       )}
 
+      <View style={styles.bottomRow}>
+        <TouchableOpacity style={styles.btnGreen} onPress={exportToExcel}>
+          <Text style={styles.btnText}>导出CSV</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.btnGray} onPress={generateScreenshot}>
+          <Text style={styles.btnText}>截图说明</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.btnRed} onPress={handleExit}>
+          <Text style={styles.btnText}>退出</Text>
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.footer}>
         <Text style={styles.footerText}>金尊分红司庆版简版建议书助手 v1.0</Text>
       </View>
@@ -199,19 +257,48 @@ const styles = StyleSheet.create({
     padding: 10,
     backgroundColor: 'white',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
+  },
+  bottomRow: {
+    flexDirection: 'row',
+    padding: 10,
+    backgroundColor: 'white',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    gap: 8,
   },
   btnOrange: {
     backgroundColor: '#FF6B00',
     paddingVertical: 10,
-    paddingHorizontal: 15,
+    paddingHorizontal: 12,
     borderRadius: 5,
   },
-  btnPurple: {
-    backgroundColor: '#9c27b0',
+  btnBlue: {
+    backgroundColor: '#2196F3',
     paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 5,
+  },
+  btnGreen: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 12,
     paddingHorizontal: 15,
     borderRadius: 5,
+    flex: 1,
+  },
+  btnGray: {
+    backgroundColor: '#9E9E9E',
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    borderRadius: 5,
+    flex: 1,
+  },
+  btnRed: {
+    backgroundColor: '#F44336',
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    borderRadius: 5,
+    flex: 1,
   },
   btnText: {
     color: 'white',
