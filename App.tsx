@@ -36,14 +36,16 @@ const PAYMENT_YEARS = 8;
 const BASE_PREMIUM = 100000;
 const BASE_AGE = 40;
 const GUARANTEED_RATE = 1.05;
-const DIVIDEND_RATE = 0.03;
-const CASH_VALUE_GROWTH = 0.0175;
+const DIVIDEND_RATE_BASE = 0.03;
 
 export default function App() {
+  const [age, setAge] = useState<string>('40');
+  const [premium, setPremium] = useState<string>('100000');
+  const [paymentYears, setPaymentYears] = useState<string>('8');
   const [dividendRate, setDividendRate] = useState<string>('1.6');
   const [data, setData] = useState<DataRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [pdfLoaded, setPdfLoaded] = useState(false);
+  const [showInput, setShowInput] = useState(true);
 
   const formatNumber = (num: number | null | undefined): string => {
     if (num === null || num === undefined) return '--';
@@ -61,17 +63,24 @@ export default function App() {
   };
 
   const generateData = (rate: number) => {
+    const ageNum = parseInt(age) || 40;
+    const premiumNum = parseInt(premium) || 100000;
+    const years = parseInt(paymentYears) || 8;
+    
     const newData: DataRow[] = [];
     let prevCashValue = 0;
     let prevExpectedSurvival = 0;
+    let prevDemoSurvival = 0;
     
     for (let year = 1; year <= 30; year++) {
-      const isPaid = year <= PAYMENT_YEARS;
-      const totalPremium = isPaid ? BASE_PREMIUM * year : BASE_PREMIUM * PAYMENT_YEARS;
+      const isPaid = year <= years;
+      const totalPremium = isPaid ? premiumNum * year : premiumNum * years;
       
       const guaranteed = totalPremium * GUARANTEED_RATE;
-      const currentDivRaw = BASE_PREMIUM * DIVIDEND_RATE * (isPaid ? 1 : 0);
-      const accumDivRaw = currentDivRaw * year;
+      
+      const baseDividend = premiumNum * DIVIDEND_RATE_BASE;
+      const currentDivRaw = baseDividend * (isPaid ? 1 : 0);
+      const accumDivRaw = baseDividend * year;
       
       const currentDivDemo = currentDivRaw * rate;
       const accumDivDemo = accumDivRaw * rate;
@@ -89,8 +98,8 @@ export default function App() {
       }
       
       let demoRate = null;
-      if (year >= 11) {
-        demoRate = 0.038;
+      if (prevDemoSurvival > 0) {
+        demoRate = (demoSurvival / prevDemoSurvival) - 1;
       }
       
       let expectedRate = null;
@@ -99,18 +108,19 @@ export default function App() {
       }
       
       let expectedSimpleRate = null;
-      if (year > PAYMENT_YEARS && totalPremium > 0 && expectedSurvival > totalPremium) {
-        const yearsFactor = (year + PAYMENT_YEARS) / 2;
+      if (year > years && totalPremium > 0 && expectedSurvival > totalPremium) {
+        const yearsFactor = (year + years) / 2;
         expectedSimpleRate = (expectedSurvival - totalPremium) / totalPremium / yearsFactor;
       }
       
       prevCashValue = cashValue;
       prevExpectedSurvival = expectedSurvival;
+      prevDemoSurvival = demoSurvival;
       
       newData.push({
         policy_year: year,
-        age: BASE_AGE + year,
-        premium: isPaid ? BASE_PREMIUM : 0,
+        age: ageNum + year,
+        premium: isPaid ? premiumNum : 0,
         total_premium: totalPremium,
         death_benefit: Math.round(guaranteed * 1.05 + accumDivDemo),
         cash_value: Math.round(cashValue),
@@ -137,7 +147,7 @@ export default function App() {
       
       if (result.assets && result.assets[0]) {
         setLoading(true);
-        setPdfLoaded(true);
+        setShowInput(false);
         
         setTimeout(() => {
           const rate = parseFloat(dividendRate) || 1.6;
@@ -158,13 +168,13 @@ export default function App() {
   };
 
   const handleReset = () => {
-    setPdfLoaded(false);
+    setShowInput(true);
     setData([]);
   };
 
   const exportToCSV = () => {
     if (data.length === 0) {
-      Alert.alert('提示', '请先导入数据');
+      Alert.alert('提示', '请先生成数据');
       return;
     }
     
@@ -196,42 +206,39 @@ export default function App() {
     ]);
   };
 
+  const InputField = ({ label, value, onChange, placeholder, keyboardType = 'default' }: any) => (
+    <View style={styles.inputRow}>
+      <Text style={styles.inputLabel}>{label}</Text>
+      <TextInput
+        style={styles.input}
+        value={value}
+        onChangeText={onChange}
+        placeholder={placeholder}
+        keyboardType={keyboardType}
+      />
+    </View>
+  );
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
       <View style={styles.header}>
         <Text style={styles.title}>金尊分红司庆版简版建议书</Text>
-        {pdfLoaded && (
-          <Text style={styles.subtitle}>分红实现率 {dividendRate}x · {PAYMENT_YEARS}年缴</Text>
+        {data.length > 0 && (
+          <Text style={styles.subtitle}>分红实现率 {dividendRate}x · {paymentYears}年缴 · 年保费 {parseInt(premium).toLocaleString()}元</Text>
         )}
       </View>
 
-      {!pdfLoaded ? (
+      {showInput ? (
         <View style={styles.inputPanel}>
-          <Text style={styles.inputTitle}>功能说明</Text>
-          <Text style={styles.inputDesc}>点击下方按钮导入PDF建议书</Text>
-          <Text style={styles.inputDesc}>或使用示例数据测试</Text>
+          <Text style={styles.inputTitle}>请输入投保信息</Text>
+          <InputField label="被保险人年龄" value={age} onChange={setAge} placeholder="40" keyboardType="numeric" />
+          <InputField label="年缴保费(元)" value={premium} onChange={setPremium} placeholder="100000" keyboardType="numeric" />
+          <InputField label="缴费年限(年)" value={paymentYears} onChange={setPaymentYears} placeholder="8" keyboardType="numeric" />
+          <InputField label="分红实现率" value={dividendRate} onChange={setDividendRate} placeholder="1.6" keyboardType="numeric" />
           
           <TouchableOpacity style={styles.btnOrange} onPress={handlePickPdf}>
-            <Text style={styles.btnText}>导入PDF建议书</Text>
-          </TouchableOpacity>
-          
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>或</Text>
-            <View style={styles.dividerLine} />
-          </View>
-          
-          <TouchableOpacity style={styles.btnBlue} onPress={() => {
-            setPdfLoaded(true);
-            setLoading(true);
-            const rate = parseFloat(dividendRate) || 1.6;
-            setTimeout(() => {
-              setData(generateData(rate));
-              setLoading(false);
-            }, 300);
-          }}>
-            <Text style={styles.btnText}>使用示例数据</Text>
+            <Text style={styles.btnText}>生成测算表</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -241,10 +248,10 @@ export default function App() {
               <Text style={styles.btnTextSmall}>重置</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.btnSmall} onPress={() => adjustDividend(0.1)}>
-              <Text style={styles.btnTextSmall}>+0.1</Text>
+              <Text style={styles.btnTextSmall}>+0.1x</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.btnSmall} onPress={() => adjustDividend(-0.1)}>
-              <Text style={styles.btnTextSmall}>-0.1</Text>
+              <Text style={styles.btnTextSmall}>-0.1x</Text>
             </TouchableOpacity>
             <Text style={styles.rateText}>{dividendRate}x</Text>
           </View>
@@ -330,34 +337,39 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     backgroundColor: 'white',
-    justifyContent: 'center',
   },
   inputTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 15,
+    marginBottom: 20,
     textAlign: 'center',
   },
-  inputDesc: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  divider: {
+  inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 20,
+    marginBottom: 15,
   },
-  dividerLine: {
+  inputLabel: {
+    width: 100,
+    fontSize: 14,
+    color: '#333',
+  },
+  input: {
     flex: 1,
-    height: 1,
-    backgroundColor: '#ddd',
-  },
-  dividerText: {
+    height: 44,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 5,
     paddingHorizontal: 10,
-    color: '#999',
+    fontSize: 16,
+  },
+  btnOrange: {
+    backgroundColor: '#FF6B00',
+    paddingVertical: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 20,
   },
   actionRow: {
     flexDirection: 'row',
@@ -373,23 +385,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-around',
   },
-  btnOrange: {
-    backgroundColor: '#FF6B00',
-    paddingVertical: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  btnBlue: {
-    backgroundColor: '#2196F3',
-    paddingVertical: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
   btnSmall: {
     backgroundColor: '#4CAF50',
     paddingVertical: 8,
-    paddingHorizontal: 15,
+    paddingHorizontal: 12,
     borderRadius: 5,
   },
   btnGreen: {
