@@ -12,25 +12,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Print directory structure
-        run: |
-          pwd
-          ls -la
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Install dependencies
-        run: |
-          cd app
-          npm install
+        run: ls -la && npm install
 
       - name: Generate Android project
-        run: |
-          cd app
-          npx expo prebuild --platform android --clean
+        run: npx expo prebuild --platform android --clean
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -39,13 +30,10 @@ jobs:
           java-version: '17'
 
       - name: Build Android APK (Release)
-        run: |
-          cd app/android
-          chmod +x gradlew
-          ./gradlew assembleRelease
+        run: ls -la android && cd android && chmod +x gradlew && ./gradlew assembleRelease
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-release
-          path: app/android/app/build/outputs/apk/release/app-release.apk
+          path: android/app/build/outputs/apk/release/app-release.apk
