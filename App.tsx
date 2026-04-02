@@ -32,11 +32,17 @@ const COLUMNS = [
 const screenWidth = Dimensions.get('window').width;
 const CELL_WIDTH = Math.floor((screenWidth - 20) / 4) + 5;
 
+const PAYMENT_YEARS = 8;
+const BASE_PREMIUM = 100000;
+const BASE_AGE = 40;
+const GUARANTEED_RATE = 1.05;
+const DIVIDEND_RATE = 0.03;
+const CASH_VALUE_GROWTH = 0.0175;
+
 export default function App() {
   const [dividendRate, setDividendRate] = useState<string>('1.6');
   const [data, setData] = useState<DataRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [showInput, setShowInput] = useState(true);
   const [pdfLoaded, setPdfLoaded] = useState(false);
 
   const formatNumber = (num: number | null | undefined): string => {
@@ -54,6 +60,74 @@ export default function App() {
     return (rate * 100).toFixed(2) + '%';
   };
 
+  const generateData = (rate: number) => {
+    const newData: DataRow[] = [];
+    let prevCashValue = 0;
+    let prevExpectedSurvival = 0;
+    
+    for (let year = 1; year <= 30; year++) {
+      const isPaid = year <= PAYMENT_YEARS;
+      const totalPremium = isPaid ? BASE_PREMIUM * year : BASE_PREMIUM * PAYMENT_YEARS;
+      
+      const guaranteed = totalPremium * GUARANTEED_RATE;
+      const currentDivRaw = BASE_PREMIUM * DIVIDEND_RATE * (isPaid ? 1 : 0);
+      const accumDivRaw = currentDivRaw * year;
+      
+      const currentDivDemo = currentDivRaw * rate;
+      const accumDivDemo = accumDivRaw * rate;
+      
+      const cashValue = guaranteed;
+      const currentDividendCash = currentDivDemo;
+      const accumDividendCash = accumDivDemo;
+      
+      const demoSurvival = cashValue + accumDivDemo;
+      const expectedSurvival = cashValue + accumDividendCash;
+      
+      let growthRate = null;
+      if (prevCashValue > 0) {
+        growthRate = (cashValue / prevCashValue) - 1;
+      }
+      
+      let demoRate = null;
+      if (year >= 11) {
+        demoRate = 0.038;
+      }
+      
+      let expectedRate = null;
+      if (prevExpectedSurvival > 0) {
+        expectedRate = (expectedSurvival / prevExpectedSurvival) - 1;
+      }
+      
+      let expectedSimpleRate = null;
+      if (year > PAYMENT_YEARS && totalPremium > 0 && expectedSurvival > totalPremium) {
+        const yearsFactor = (year + PAYMENT_YEARS) / 2;
+        expectedSimpleRate = (expectedSurvival - totalPremium) / totalPremium / yearsFactor;
+      }
+      
+      prevCashValue = cashValue;
+      prevExpectedSurvival = expectedSurvival;
+      
+      newData.push({
+        policy_year: year,
+        age: BASE_AGE + year,
+        premium: isPaid ? BASE_PREMIUM : 0,
+        total_premium: totalPremium,
+        death_benefit: Math.round(guaranteed * 1.05 + accumDivDemo),
+        cash_value: Math.round(cashValue),
+        growth_rate: growthRate,
+        current_dividend_cash: Math.round(currentDividendCash),
+        accum_dividend_cash: Math.round(accumDividendCash),
+        demo_survival: Math.round(demoSurvival),
+        demo_rate: demoRate,
+        expected_survival: Math.round(expectedSurvival),
+        expected_rate: expectedRate,
+        expected_simple_rate: expectedSimpleRate,
+      });
+    }
+    
+    return newData;
+  };
+
   const handlePickPdf = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -64,10 +138,11 @@ export default function App() {
       if (result.assets && result.assets[0]) {
         setLoading(true);
         setPdfLoaded(true);
-        setShowInput(false);
         
         setTimeout(() => {
-          generateDemoData();
+          const rate = parseFloat(dividendRate) || 1.6;
+          setData(generateData(rate));
+          setLoading(false);
         }, 500);
       }
     } catch (error) {
@@ -76,142 +151,20 @@ export default function App() {
     }
   };
 
-  const generateDemoData = () => {
-    const rate = parseFloat(dividendRate) || 1.6;
-    const paymentYears = 8;
-    const basePremium = 100000;
-    const baseAge = 40;
-    
-    const newData: DataRow[] = [];
-    let prevCashValue = 0;
-    let prevExpectedSurvival = 0;
-    
-    for (let year = 1; year <= 30; year++) {
-      const isPaid = year <= paymentYears;
-      const totalPremium = isPaid ? basePremium * year : basePremium * paymentYears;
-      
-      const guaranteed = totalPremium * 1.05;
-      const currentDividend = basePremium * 0.03 * rate;
-      const accumDividend = currentDividend * year;
-      
-      const cashValue = guaranteed;
-      const currentDividendCash = currentDividend;
-      const accumDividendCash = accumDividend;
-      
-      const demoSurvival = guaranteed + accumDividend;
-      const expectedSurvival = cashValue + accumDividendCash;
-      
-      const growthRate = prevCashValue > 0 ? (cashValue / prevCashValue) - 1 : null;
-      const demoRate = year >= 11 ? 0.038 : null;
-      
-      const expectedRate = prevExpectedSurvival > 0 ? (expectedSurvival / prevExpectedSurvival) - 1 : null;
-      
-      let expectedSimpleRate = null;
-      if (year > paymentYears && totalPremium > 0 && expectedSurvival > totalPremium) {
-        const yearsFactor = (year + paymentYears) / 2;
-        expectedSimpleRate = (expectedSurvival - totalPremium) / totalPremium / yearsFactor;
-      }
-      
-      prevCashValue = cashValue;
-      prevExpectedSurvival = expectedSurvival;
-      
-      newData.push({
-        policy_year: year,
-        age: baseAge + year,
-        premium: isPaid ? basePremium : 0,
-        total_premium: totalPremium,
-        death_benefit: Math.round(guaranteed * 1.05 + accumDividend),
-        cash_value: Math.round(cashValue),
-        growth_rate: growthRate,
-        current_dividend_cash: Math.round(currentDividendCash),
-        accum_dividend_cash: Math.round(accumDividendCash),
-        demo_survival: Math.round(demoSurvival),
-        demo_rate: demoRate,
-        expected_survival: Math.round(expectedSurvival),
-        expected_rate: expectedRate,
-        expected_simple_rate: expectedSimpleRate,
-      });
-    }
-    setData(newData);
-    setLoading(false);
-  };
-
   const adjustDividend = (delta: number) => {
     const newRate = Math.max(0.1, parseFloat(dividendRate) + delta);
     setDividendRate(newRate.toFixed(1));
-    
-    if (data.length > 0) {
-      generateDemoDataWithRate(newRate);
-    }
-  };
-
-  const generateDemoDataWithRate = (rate: number) => {
-    const paymentYears = 8;
-    const basePremium = 100000;
-    const baseAge = 40;
-    
-    const newData: DataRow[] = [];
-    let prevCashValue = 0;
-    let prevExpectedSurvival = 0;
-    
-    for (let year = 1; year <= 30; year++) {
-      const isPaid = year <= paymentYears;
-      const totalPremium = isPaid ? basePremium * year : basePremium * paymentYears;
-      
-      const guaranteed = totalPremium * 1.05;
-      const currentDividend = basePremium * 0.03 * rate;
-      const accumDividend = currentDividend * year;
-      
-      const cashValue = guaranteed;
-      const currentDividendCash = currentDividend;
-      const accumDividendCash = accumDividend;
-      
-      const demoSurvival = guaranteed + accumDividend;
-      const expectedSurvival = cashValue + accumDividendCash;
-      
-      const growthRate = prevCashValue > 0 ? (cashValue / prevCashValue) - 1 : null;
-      const demoRate = year >= 11 ? 0.038 : null;
-      
-      const expectedRate = prevExpectedSurvival > 0 ? (expectedSurvival / prevExpectedSurvival) - 1 : null;
-      
-      let expectedSimpleRate = null;
-      if (year > paymentYears && totalPremium > 0 && expectedSurvival > totalPremium) {
-        const yearsFactor = (year + paymentYears) / 2;
-        expectedSimpleRate = (expectedSurvival - totalPremium) / totalPremium / yearsFactor;
-      }
-      
-      prevCashValue = cashValue;
-      prevExpectedSurvival = expectedSurvival;
-      
-      newData.push({
-        policy_year: year,
-        age: baseAge + year,
-        premium: isPaid ? basePremium : 0,
-        total_premium: totalPremium,
-        death_benefit: Math.round(guaranteed * 1.05 + accumDividend),
-        cash_value: Math.round(cashValue),
-        growth_rate: growthRate,
-        current_dividend_cash: Math.round(currentDividendCash),
-        accum_dividend_cash: Math.round(accumDividendCash),
-        demo_survival: Math.round(demoSurvival),
-        demo_rate: demoRate,
-        expected_survival: Math.round(expectedSurvival),
-        expected_rate: expectedRate,
-        expected_simple_rate: expectedSimpleRate,
-      });
-    }
-    setData(newData);
+    setData(generateData(newRate));
   };
 
   const handleReset = () => {
-    setShowInput(true);
     setPdfLoaded(false);
     setData([]);
   };
 
   const exportToCSV = () => {
     if (data.length === 0) {
-      Alert.alert('提示', '请先导入PDF');
+      Alert.alert('提示', '请先导入数据');
       return;
     }
     
@@ -249,15 +202,15 @@ export default function App() {
       <View style={styles.header}>
         <Text style={styles.title}>金尊分红司庆版简版建议书</Text>
         {pdfLoaded && (
-          <Text style={styles.subtitle}>分红实现率 {dividendRate}x</Text>
+          <Text style={styles.subtitle}>分红实现率 {dividendRate}x · {PAYMENT_YEARS}年缴</Text>
         )}
       </View>
 
-      {showInput ? (
+      {!pdfLoaded ? (
         <View style={styles.inputPanel}>
           <Text style={styles.inputTitle}>功能说明</Text>
-          <Text style={styles.inputDesc}>点击下方按钮导入PDF建议书文件</Text>
-          <Text style={styles.inputDesc}>导入后可调整分红实现率参数</Text>
+          <Text style={styles.inputDesc}>点击下方按钮导入PDF建议书</Text>
+          <Text style={styles.inputDesc}>或使用示例数据测试</Text>
           
           <TouchableOpacity style={styles.btnOrange} onPress={handlePickPdf}>
             <Text style={styles.btnText}>导入PDF建议书</Text>
@@ -271,9 +224,12 @@ export default function App() {
           
           <TouchableOpacity style={styles.btnBlue} onPress={() => {
             setPdfLoaded(true);
-            setShowInput(false);
             setLoading(true);
-            setTimeout(() => generateDemoData(), 300);
+            const rate = parseFloat(dividendRate) || 1.6;
+            setTimeout(() => {
+              setData(generateData(rate));
+              setLoading(false);
+            }, 300);
           }}>
             <Text style={styles.btnText}>使用示例数据</Text>
           </TouchableOpacity>
@@ -296,7 +252,7 @@ export default function App() {
           {loading ? (
             <View style={styles.loading}>
               <ActivityIndicator size="large" color="#1a73e8" />
-              <Text style={styles.loadingText}>正在处理...</Text>
+              <Text style={styles.loadingText}>正在计算...</Text>
             </View>
           ) : data.length > 0 ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
