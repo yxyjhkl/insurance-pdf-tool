@@ -8,24 +8,29 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./app
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Print directory structure
+        run: |
+          pwd
+          ls -la
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          working-directory: ./app
 
       - name: Install dependencies
-        run: npm install
+        run: |
+          cd app
+          npm install
 
       - name: Generate Android project
-        run: npx expo prebuild --platform android --clean
+        run: |
+          cd app
+          npx expo prebuild --platform android --clean
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -35,7 +40,7 @@ jobs:
 
       - name: Build Android APK (Release)
         run: |
-          cd android
+          cd app/android
           chmod +x gradlew
           ./gradlew assembleRelease
 
