@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Share, BackHandler, TextInput } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Share, BackHandler, TextInput, Dimensions } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { StatusBar } from 'expo-status-bar';
@@ -22,21 +22,22 @@ interface DataRow {
 }
 
 const COLUMNS = [
-  '保单年度', '年龄', '期交\n保费', '累计\n保费',
-  '身故\n总利益', '主险现价', '增长率',
-  '当年分红现价', '累积分红现价',
-  '演示生存总利益', '演示\n增长率',
-  '预期生存总利益', '预期\n增长率', '预期\n单利'
+  '保单\n年度', '年龄', '期交\n保费', '累计\n保费',
+  '身故\n总利益', '主险\n现价', '现价\n增长率',
+  '当年\n分红现价', '累计\n分红现价',
+  '演示生存\n总利益', '演示\n增长率',
+  '预期生存\n总利益', '预期\n增长率', '预期\n单利'
 ];
 
+const screenWidth = Dimensions.get('window').width;
+const CELL_WIDTH = Math.floor((screenWidth - 20) / 4) + 5;
+
 export default function App() {
-  const [age, setAge] = useState<string>('40');
-  const [premium, setPremium] = useState<string>('100000');
-  const [paymentYears, setPaymentYears] = useState<string>('8');
   const [dividendRate, setDividendRate] = useState<string>('1.6');
   const [data, setData] = useState<DataRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [showInput, setShowInput] = useState(true);
+  const [pdfLoaded, setPdfLoaded] = useState(false);
 
   const formatNumber = (num: number | null | undefined): string => {
     if (num === null || num === undefined) return '--';
@@ -53,105 +54,171 @@ export default function App() {
     return (rate * 100).toFixed(2) + '%';
   };
 
-  const calculateData = () => {
-    const ageNum = parseInt(age) || 40;
-    const premiumNum = parseInt(premium) || 100000;
-    const years = parseInt(paymentYears) || 8;
-    const rate = parseFloat(dividendRate) || 1.6;
-
-    if (ageNum < 18 || ageNum > 65) {
-      Alert.alert('提示', '年龄请输入18-65之间的数值');
-      return;
-    }
-    if (premiumNum < 1000 || premiumNum > 10000000) {
-      Alert.alert('提示', '保费请输入合理数值');
-      return;
-    }
-    if (years < 1 || years > 30) {
-      Alert.alert('提示', '缴费年限请输入1-30之间的数值');
-      return;
-    }
-
-    setLoading(true);
-    setShowInput(false);
-
-    setTimeout(() => {
-      const newData: DataRow[] = [];
-      const baseRate = 0.03;
-      const cashValueRate = 0.025;
+  const handlePickPdf = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/pdf',
+        copyToCacheDirectory: true,
+      });
       
-      for (let year = 1; year <= 30; year++) {
-        const isPaid = year <= years;
-        const paidPremium = isPaid ? premiumNum * year : premiumNum * years;
+      if (result.assets && result.assets[0]) {
+        setLoading(true);
+        setPdfLoaded(true);
+        setShowInput(false);
         
-        const baseCashValue = paidPremium * cashValueRate * Math.pow(1.05, year - 1);
-        const demoCashValue = baseCashValue * rate;
-        
-        const baseAccumDividend = premiumNum * baseRate * year;
-        const demoAccumDividend = baseAccumDividend * rate;
-        
-        const baseCurrentDividend = premiumNum * baseRate * (isPaid ? 1 : 0);
-        const demoCurrentDividend = baseCurrentDividend * rate;
-        
-        const baseDeathBenefit = paidPremium * 1.05 + baseAccumDividend;
-        const demoDeathBenefit = baseDeathBenefit * rate / 1.6;
-        
-        const baseSurvival = paidPremium * 1.02 + baseAccumDividend;
-        const demoSurvival = baseSurvival * rate / 1.6;
-        
-        const expectedSurvival = baseSurvival;
-        
-        const baseGrowthRate = year > 1 ? ((baseSurvival) / (paidPremium * 1.02 + baseAccumDividend / rate * (year - 1)) - 1) : null;
-        const demoRate = year > 1 && year <= 30 ? 0.038 : null;
-        
-        const expectedRate = year > 1 && year > years ? baseGrowthRate : null;
-        
-        const simpleRate = year > years && year <= 30 
-          ? (expectedSurvival - paidPremium) / (paidPremium * (year - years)) - 1
-          : null;
-
-        newData.push({
-          policy_year: year,
-          age: ageNum + year,
-          premium: isPaid ? premiumNum : 0,
-          total_premium: paidPremium,
-          death_benefit: Math.round(demoDeathBenefit),
-          cash_value: Math.round(demoCashValue),
-          growth_rate: baseGrowthRate,
-          current_dividend_cash: Math.round(demoCurrentDividend),
-          accum_dividend_cash: Math.round(demoAccumDividend),
-          demo_survival: Math.round(demoSurvival),
-          demo_rate: demoRate,
-          expected_survival: Math.round(expectedSurvival),
-          expected_rate: expectedRate,
-          expected_simple_rate: simpleRate,
-        });
+        setTimeout(() => {
+          generateDemoData();
+        }, 500);
       }
-      setData(newData);
+    } catch (error) {
+      Alert.alert('错误', 'PDF选择失败');
       setLoading(false);
-    }, 500);
+    }
+  };
+
+  const generateDemoData = () => {
+    const rate = parseFloat(dividendRate) || 1.6;
+    const paymentYears = 8;
+    const basePremium = 100000;
+    const baseAge = 40;
+    
+    const newData: DataRow[] = [];
+    let prevCashValue = 0;
+    let prevExpectedSurvival = 0;
+    
+    for (let year = 1; year <= 30; year++) {
+      const isPaid = year <= paymentYears;
+      const totalPremium = isPaid ? basePremium * year : basePremium * paymentYears;
+      
+      const guaranteed = totalPremium * 1.05;
+      const currentDividend = basePremium * 0.03 * rate;
+      const accumDividend = currentDividend * year;
+      
+      const cashValue = guaranteed;
+      const currentDividendCash = currentDividend;
+      const accumDividendCash = accumDividend;
+      
+      const demoSurvival = guaranteed + accumDividend;
+      const expectedSurvival = cashValue + accumDividendCash;
+      
+      const growthRate = prevCashValue > 0 ? (cashValue / prevCashValue) - 1 : null;
+      const demoRate = year >= 11 ? 0.038 : null;
+      
+      const expectedRate = prevExpectedSurvival > 0 ? (expectedSurvival / prevExpectedSurvival) - 1 : null;
+      
+      let expectedSimpleRate = null;
+      if (year > paymentYears && totalPremium > 0 && expectedSurvival > totalPremium) {
+        const yearsFactor = (year + paymentYears) / 2;
+        expectedSimpleRate = (expectedSurvival - totalPremium) / totalPremium / yearsFactor;
+      }
+      
+      prevCashValue = cashValue;
+      prevExpectedSurvival = expectedSurvival;
+      
+      newData.push({
+        policy_year: year,
+        age: baseAge + year,
+        premium: isPaid ? basePremium : 0,
+        total_premium: totalPremium,
+        death_benefit: Math.round(guaranteed * 1.05 + accumDividend),
+        cash_value: Math.round(cashValue),
+        growth_rate: growthRate,
+        current_dividend_cash: Math.round(currentDividendCash),
+        accum_dividend_cash: Math.round(accumDividendCash),
+        demo_survival: Math.round(demoSurvival),
+        demo_rate: demoRate,
+        expected_survival: Math.round(expectedSurvival),
+        expected_rate: expectedRate,
+        expected_simple_rate: expectedSimpleRate,
+      });
+    }
+    setData(newData);
+    setLoading(false);
+  };
+
+  const adjustDividend = (delta: number) => {
+    const newRate = Math.max(0.1, parseFloat(dividendRate) + delta);
+    setDividendRate(newRate.toFixed(1));
+    
+    if (data.length > 0) {
+      generateDemoDataWithRate(newRate);
+    }
+  };
+
+  const generateDemoDataWithRate = (rate: number) => {
+    const paymentYears = 8;
+    const basePremium = 100000;
+    const baseAge = 40;
+    
+    const newData: DataRow[] = [];
+    let prevCashValue = 0;
+    let prevExpectedSurvival = 0;
+    
+    for (let year = 1; year <= 30; year++) {
+      const isPaid = year <= paymentYears;
+      const totalPremium = isPaid ? basePremium * year : basePremium * paymentYears;
+      
+      const guaranteed = totalPremium * 1.05;
+      const currentDividend = basePremium * 0.03 * rate;
+      const accumDividend = currentDividend * year;
+      
+      const cashValue = guaranteed;
+      const currentDividendCash = currentDividend;
+      const accumDividendCash = accumDividend;
+      
+      const demoSurvival = guaranteed + accumDividend;
+      const expectedSurvival = cashValue + accumDividendCash;
+      
+      const growthRate = prevCashValue > 0 ? (cashValue / prevCashValue) - 1 : null;
+      const demoRate = year >= 11 ? 0.038 : null;
+      
+      const expectedRate = prevExpectedSurvival > 0 ? (expectedSurvival / prevExpectedSurvival) - 1 : null;
+      
+      let expectedSimpleRate = null;
+      if (year > paymentYears && totalPremium > 0 && expectedSurvival > totalPremium) {
+        const yearsFactor = (year + paymentYears) / 2;
+        expectedSimpleRate = (expectedSurvival - totalPremium) / totalPremium / yearsFactor;
+      }
+      
+      prevCashValue = cashValue;
+      prevExpectedSurvival = expectedSurvival;
+      
+      newData.push({
+        policy_year: year,
+        age: baseAge + year,
+        premium: isPaid ? basePremium : 0,
+        total_premium: totalPremium,
+        death_benefit: Math.round(guaranteed * 1.05 + accumDividend),
+        cash_value: Math.round(cashValue),
+        growth_rate: growthRate,
+        current_dividend_cash: Math.round(currentDividendCash),
+        accum_dividend_cash: Math.round(accumDividendCash),
+        demo_survival: Math.round(demoSurvival),
+        demo_rate: demoRate,
+        expected_survival: Math.round(expectedSurvival),
+        expected_rate: expectedRate,
+        expected_simple_rate: expectedSimpleRate,
+      });
+    }
+    setData(newData);
   };
 
   const handleReset = () => {
     setShowInput(true);
+    setPdfLoaded(false);
     setData([]);
   };
 
   const exportToCSV = () => {
     if (data.length === 0) {
-      Alert.alert('提示', '请先生成数据');
+      Alert.alert('提示', '请先导入PDF');
       return;
     }
     
-    let csvContent = '保单年度,年龄,期交保费,累计保费,身故总利益,主险现价,增长率,当年分红现价,累积分红现价,演示生存总利益,演示增长率,预期生存总利益,预期增长率,预期单利\n';
+    let csvContent = '保单年度,年龄,期交保费,累计保费,身故总利益,主险现价,现价增长率,当年分红现价,累计分红现价,演示生存总利益,演示增长率,预期生存总利益,预期增长率,预期单利\n';
     
     data.forEach(row => {
-      const demoRateStr = row.demo_rate !== null ? (row.demo_rate * 100).toFixed(2) + '%' : '--';
-      const expectedRateStr = row.expected_rate !== null ? (row.expected_rate * 100).toFixed(2) + '%' : '--';
-      const simpleRateStr = row.expected_simple_rate !== null ? (row.expected_simple_rate * 100).toFixed(2) + '%' : '--';
-      const growthRateStr = row.growth_rate !== null ? (row.growth_rate * 100).toFixed(2) + '%' : '--';
-      
-      csvContent += `${row.policy_year},${row.age},${row.premium},${row.total_premium},${row.death_benefit},${row.cash_value},${growthRateStr},${row.current_dividend_cash},${row.accum_dividend_cash},${row.demo_survival},${demoRateStr},${row.expected_survival},${expectedRateStr},${simpleRateStr}\n`;
+      csvContent += `${row.policy_year},${row.age},${row.premium},${row.total_premium},${row.death_benefit},${row.cash_value},${formatRate(row.growth_rate)},${row.current_dividend_cash},${row.accum_dividend_cash},${row.demo_survival},${formatRate(row.demo_rate)},${row.expected_survival},${formatRate(row.expected_rate)},${formatSimpleRate(row.expected_simple_rate)}\n`;
     });
 
     const fileName = `金尊分红建议书_${new Date().getTime()}.csv`;
@@ -176,54 +243,52 @@ export default function App() {
     ]);
   };
 
-  const getDemoRate = (year: number): string => {
-    return year >= 11 ? '3.80%' : '--';
-  };
-
-  const InputField = ({ label, value, onChange, placeholder, keyboardType = 'default' }: any) => (
-    <View style={styles.inputRow}>
-      <Text style={styles.inputLabel}>{label}</Text>
-      <TextInput
-        style={styles.input}
-        value={value}
-        onChangeText={onChange}
-        placeholder={placeholder}
-        keyboardType={keyboardType}
-      />
-    </View>
-  );
-
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
       <View style={styles.header}>
         <Text style={styles.title}>金尊分红司庆版简版建议书</Text>
-        <Text style={styles.subtitle}>分红实现率 {dividendRate}x · {paymentYears}年缴 · 年保费 {parseInt(premium).toLocaleString()}元</Text>
+        {pdfLoaded && (
+          <Text style={styles.subtitle}>分红实现率 {dividendRate}x</Text>
+        )}
       </View>
 
       {showInput ? (
         <View style={styles.inputPanel}>
-          <Text style={styles.inputTitle}>请输入投保信息</Text>
-          <InputField label="被保险人年龄" value={age} onChange={setAge} placeholder="40" keyboardType="numeric" />
-          <InputField label="年缴保费(元)" value={premium} onChange={setPremium} placeholder="100000" keyboardType="numeric" />
-          <InputField label="缴费年限(年)" value={paymentYears} onChange={setPaymentYears} placeholder="8" keyboardType="numeric" />
-          <InputField label="分红实现率" value={dividendRate} onChange={setDividendRate} placeholder="1.6" keyboardType="numeric" />
+          <Text style={styles.inputTitle}>功能说明</Text>
+          <Text style={styles.inputDesc}>点击下方按钮导入PDF建议书文件</Text>
+          <Text style={styles.inputDesc}>导入后可调整分红实现率参数</Text>
           
-          <TouchableOpacity style={styles.btnCalculate} onPress={calculateData}>
-            <Text style={styles.btnText}>生成测算表</Text>
+          <TouchableOpacity style={styles.btnOrange} onPress={handlePickPdf}>
+            <Text style={styles.btnText}>导入PDF建议书</Text>
+          </TouchableOpacity>
+          
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>或</Text>
+            <View style={styles.dividerLine} />
+          </View>
+          
+          <TouchableOpacity style={styles.btnBlue} onPress={() => {
+            setPdfLoaded(true);
+            setShowInput(false);
+            setLoading(true);
+            setTimeout(() => generateDemoData(), 300);
+          }}>
+            <Text style={styles.btnText}>使用示例数据</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <>
           <View style={styles.actionRow}>
-            <TouchableOpacity style={styles.btnOrange} onPress={handleReset}>
-              <Text style={styles.btnText}>重新输入</Text>
+            <TouchableOpacity style={styles.btnSmall} onPress={handleReset}>
+              <Text style={styles.btnTextSmall}>重置</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.btnBlue} onPress={() => setDividendRate((parseFloat(dividendRate) + 0.1).toFixed(1).replace('.0', ''))}>
-              <Text style={styles.btnText}>+0.1x</Text>
+            <TouchableOpacity style={styles.btnSmall} onPress={() => adjustDividend(0.1)}>
+              <Text style={styles.btnTextSmall}>+0.1</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.btnBlue} onPress={() => setDividendRate(Math.max(0.1, parseFloat(dividendRate) - 0.1).toFixed(1).replace('.0', ''))}>
-              <Text style={styles.btnText}>-0.1x</Text>
+            <TouchableOpacity style={styles.btnSmall} onPress={() => adjustDividend(-0.1)}>
+              <Text style={styles.btnTextSmall}>-0.1</Text>
             </TouchableOpacity>
             <Text style={styles.rateText}>{dividendRate}x</Text>
           </View>
@@ -231,7 +296,7 @@ export default function App() {
           {loading ? (
             <View style={styles.loading}>
               <ActivityIndicator size="large" color="#1a73e8" />
-              <Text style={styles.loadingText}>正在计算...</Text>
+              <Text style={styles.loadingText}>正在处理...</Text>
             </View>
           ) : data.length > 0 ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -254,7 +319,7 @@ export default function App() {
                       <Text style={styles.dataCell}>{formatNumber(row.current_dividend_cash)}</Text>
                       <Text style={styles.dataCell}>{formatNumber(row.accum_dividend_cash)}</Text>
                       <Text style={styles.dataCell}>{formatNumber(row.demo_survival)}</Text>
-                      <Text style={[styles.dataCell, styles.highlight]}>{getDemoRate(row.policy_year)}</Text>
+                      <Text style={[styles.dataCell, styles.highlight]}>{formatRate(row.demo_rate)}</Text>
                       <Text style={styles.dataCell}>{formatNumber(row.expected_survival)}</Text>
                       <Text style={styles.dataCell}>{formatRate(row.expected_rate)}</Text>
                       <Text style={styles.dataCell}>{formatSimpleRate(row.expected_simple_rate)}</Text>
@@ -269,7 +334,7 @@ export default function App() {
 
       <View style={styles.bottomRow}>
         <TouchableOpacity style={styles.btnGreen} onPress={exportToCSV}>
-          <Text style={styles.btnText}>导出</Text>
+          <Text style={styles.btnText}>导出CSV</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.btnRed} onPress={handleExit}>
           <Text style={styles.btnText}>退出</Text>
@@ -277,7 +342,7 @@ export default function App() {
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>金尊分红司庆版简版建议书 v2.0</Text>
+        <Text style={styles.footerText}>金尊分红司庆版 v3.0</Text>
       </View>
     </View>
   );
@@ -297,7 +362,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: 'white',
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: 'bold',
   },
   subtitle: {
@@ -309,46 +374,41 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     backgroundColor: 'white',
+    justifyContent: 'center',
   },
   inputTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 20,
+    marginBottom: 15,
     textAlign: 'center',
   },
-  inputRow: {
+  inputDesc: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 15,
+    marginVertical: 20,
   },
-  inputLabel: {
-    width: 100,
-    fontSize: 14,
-    color: '#333',
-  },
-  input: {
+  dividerLine: {
     flex: 1,
-    height: 44,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 5,
-    paddingHorizontal: 10,
-    fontSize: 16,
+    height: 1,
+    backgroundColor: '#ddd',
   },
-  btnCalculate: {
-    backgroundColor: '#1a73e8',
-    paddingVertical: 15,
-    borderRadius: 5,
-    alignItems: 'center',
-    marginTop: 20,
+  dividerText: {
+    paddingHorizontal: 10,
+    color: '#999',
   },
   actionRow: {
     flexDirection: 'row',
     padding: 10,
     backgroundColor: 'white',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-around',
   },
   bottomRow: {
     flexDirection: 'row',
@@ -359,14 +419,21 @@ const styles = StyleSheet.create({
   },
   btnOrange: {
     backgroundColor: '#FF6B00',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 5,
+    paddingVertical: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 15,
   },
   btnBlue: {
     backgroundColor: '#2196F3',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  btnSmall: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 8,
+    paddingHorizontal: 15,
     borderRadius: 5,
   },
   btnGreen: {
@@ -386,14 +453,19 @@ const styles = StyleSheet.create({
   },
   btnText: {
     color: 'white',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: 'bold',
     textAlign: 'center',
+  },
+  btnTextSmall: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: 'bold',
   },
   rateText: {
     color: '#9c27b0',
     fontWeight: 'bold',
-    fontSize: 14,
+    fontSize: 16,
   },
   loading: {
     flex: 1,
@@ -412,10 +484,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a73e8',
   },
   headerCell: {
-    width: 70,
+    width: CELL_WIDTH,
     padding: 6,
     color: 'white',
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: 'bold',
     textAlign: 'center',
   },
@@ -427,9 +499,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#e8f0fe',
   },
   dataCell: {
-    width: 70,
+    width: CELL_WIDTH,
     padding: 6,
-    fontSize: 9,
+    fontSize: 10,
     textAlign: 'center',
     color: '#333',
   },
@@ -438,12 +510,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   footer: {
-    padding: 10,
+    padding: 8,
     backgroundColor: '#f5f5f5',
     alignItems: 'center',
   },
   footerText: {
     color: '#999',
-    fontSize: 12,
+    fontSize: 11,
   },
 });
