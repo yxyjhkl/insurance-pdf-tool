@@ -143,10 +143,10 @@ interface DataRow {
 
 const COLUMNS = [
   '保单\n年度', '客户\n年龄',
-  '身故\n总利益', '主险\n现价', '现价\n增长率',
-  '当年\n分红现价', '累计\n分红现价',
-  '演示生存\n总利益', '演示\n增长率',
-  '预期生存\n总利益', '预期\n增长率', '预期\n单利'
+  '身故总利益', '主险现价', '现价增长率',
+  '当年分红\n现价', '累计分红\n现价',
+  '演示生存\n总利益', '演示增长率',
+  '预期生存\n总利益', '预期增长率', '预期单利'
 ];
 
 const screenWidth = Dimensions.get('window').width;
@@ -526,26 +526,17 @@ export default function App() {
               <Text style={styles.loadingText}>正在计算...</Text>
             </View>
           ) : data.length > 0 ? (
-            <View style={styles.tableContainer}>
-              <View style={styles.frozenColumn}>
-                <View style={styles.headerCell}>
-                  <Text style={styles.headerCellText}>保单\n年度</Text>
-                </View>
-                {data.map((row, index) => (
-                  <View key={row.policy_year} style={[styles.frozenCell, index % 2 === 1 && styles.dataRowAlt]}>
-                    <Text style={styles.frozenCellText}>{row.policy_year}</Text>
-                  </View>
-                ))}
-              </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={styles.scrollingTable}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={styles.table}>
                   <View style={styles.headerRow}>
-                    {COLUMNS.slice(1).map((col, idx) => (
-                      <Text key={idx} style={styles.headerCell}>{col}</Text>
+                    {COLUMNS.map((col, idx) => (
+                      <Text key={idx} style={[styles.headerCell, (idx === 0 || idx === 1) && styles.headerCellNarrow]}>{col}</Text>
                     ))}
                   </View>
                   {data.map((row, index) => (
                     <View key={row.policy_year} style={[styles.dataRow, index % 2 === 1 && styles.dataRowAlt]}>
+                      <Text style={[styles.dataCell, styles.narrowCell]}>{row.policy_year}</Text>
                       <Text style={[styles.dataCell, styles.narrowCell]}>{row.age}</Text>
                       <Text style={styles.dataCell}>{formatNumber(row.death_benefit)}</Text>
                       <Text style={styles.dataCell}>{formatNumber(row.cash_value)}</Text>
@@ -561,7 +552,7 @@ export default function App() {
                   ))}
                 </View>
               </ScrollView>
-            </View>
+            </ScrollView>
           ) : null}
         </>
       )}
@@ -837,36 +828,8 @@ const styles = StyleSheet.create({
   table: {
     padding: 10,
   },
-  tableContainer: {
-    flexDirection: 'row',
-  },
-  frozenColumn: {
-    backgroundColor: '#1a73e8',
-    width: NARROW_CELL_WIDTH + 4,
-  },
-  frozenCell: {
-    width: NARROW_CELL_WIDTH + 4,
-    height: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderRightWidth: 1,
-    borderColor: '#ddd',
-  },
-  frozenCellText: {
-    fontSize: 10,
-    color: '#333',
-    textAlign: 'center',
-  },
-  headerCellText: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  scrollingTable: {
-    backgroundColor: '#1a73e8',
+  headerCellNarrow: {
+    width: NARROW_CELL_WIDTH,
   },
   headerRow: {
     flexDirection: 'row',
@@ -874,11 +837,13 @@ const styles = StyleSheet.create({
   },
   headerCell: {
     width: CELL_WIDTH,
-    padding: 6,
+    height: 40,
+    padding: 4,
     color: 'white',
     fontSize: 10,
     fontWeight: 'bold',
     textAlign: 'center',
+    textAlignVertical: 'center',
   },
   dataRow: {
     flexDirection: 'row',
