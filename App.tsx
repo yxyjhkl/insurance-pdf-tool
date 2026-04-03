@@ -150,7 +150,9 @@ const COLUMNS = [
 ];
 
 const screenWidth = Dimensions.get('window').width;
-const CELL_WIDTH = Math.floor((screenWidth - 20) / 6);
+const COLS_COUNT = 12;
+const CELL_WIDTH = Math.floor((screenWidth - 20) / COLS_COUNT);
+const NARROW_CELL_WIDTH = Math.floor(CELL_WIDTH * 0.7);
 
 const ALL_AGES_F: number[] = INSURANCE_DB.getAvailableAges('F');
 const ALL_AGES_M: number[] = INSURANCE_DB.getAvailableAges('M');
@@ -272,7 +274,7 @@ export default function App() {
 
   const adjustDividend = (delta: number) => {
     const newRate = Math.max(0, parseFloat(dividendRate) + delta);
-    setDividendRate(newRate.toFixed(1));
+    setDividendRate(newRate.toFixed(2));
     const premiumNum = parseFloat(premium);
     if (!isNaN(premiumNum) && premiumNum >= 25000) {
       let result: DataRow[] | null = null;
@@ -467,12 +469,12 @@ export default function App() {
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>分红实现率</Text>
             <View style={styles.rateRow}>
-              <TouchableOpacity style={styles.rateBtn} onPress={() => adjustDividend(-0.1)}>
-                <Text style={styles.rateBtnText}>-0.1</Text>
+              <TouchableOpacity style={styles.rateBtn} onPress={() => adjustDividend(-0.05)}>
+                <Text style={styles.rateBtnText}>-5%</Text>
               </TouchableOpacity>
               <Text style={styles.rateValue}>{dividendRate}x</Text>
-              <TouchableOpacity style={styles.rateBtn} onPress={() => adjustDividend(0.1)}>
-                <Text style={styles.rateBtnText}>+0.1</Text>
+              <TouchableOpacity style={styles.rateBtn} onPress={() => adjustDividend(0.05)}>
+                <Text style={styles.rateBtnText}>+5%</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -489,11 +491,11 @@ export default function App() {
             <TouchableOpacity style={styles.btnSmall} onPress={handleReset}>
               <Text style={styles.btnTextSmall}>重算</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.btnSmall} onPress={() => adjustDividend(0.1)}>
-              <Text style={styles.btnTextSmall}>+0.1</Text>
+            <TouchableOpacity style={styles.btnSmall} onPress={() => adjustDividend(0.05)}>
+              <Text style={styles.btnTextSmall}>+5%</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.btnSmall} onPress={() => adjustDividend(-0.1)}>
-              <Text style={styles.btnTextSmall}>-0.1</Text>
+            <TouchableOpacity style={styles.btnSmall} onPress={() => adjustDividend(-0.05)}>
+              <Text style={styles.btnTextSmall}>-5%</Text>
             </TouchableOpacity>
             <Text style={styles.rateText}>{dividendRate}x</Text>
           </View>
@@ -536,16 +538,16 @@ export default function App() {
       )}
 
       <View style={styles.bottomRow}>
-        <TouchableOpacity style={styles.bottomBtn} onPress={() => exportToExcel(data, gender, age, premium, dividendRate)}>
+        <TouchableOpacity style={[styles.bottomBtn, styles.bottomBtn1]} onPress={() => exportToExcel(data, gender, age, premium, dividendRate)}>
           <Text style={styles.bottomBtnText}>导出表格</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomBtn} onPress={exportToCSV}>
+        <TouchableOpacity style={[styles.bottomBtn, styles.bottomBtn2]} onPress={exportToCSV}>
           <Text style={styles.bottomBtnText}>导出文本</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomBtn} onPress={() => exportToImage(data, gender, age, premium, dividendRate)}>
+        <TouchableOpacity style={[styles.bottomBtn, styles.bottomBtn3]} onPress={() => exportToImage(data, gender, age, premium, dividendRate)}>
           <Text style={styles.bottomBtnText}>导出图片</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomBtn} onPress={handleExit}>
+        <TouchableOpacity style={[styles.bottomBtn, styles.bottomBtn4]} onPress={handleExit}>
           <Text style={styles.bottomBtnText}>退出程序</Text>
         </TouchableOpacity>
       </View>
@@ -717,7 +719,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
   },
   bottomBtn: {
-    backgroundColor: '#1a73e8',
     paddingVertical: 12,
     paddingHorizontal: 8,
     borderRadius: 8,
@@ -725,6 +726,18 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
     minHeight: 50,
     justifyContent: 'center',
+  },
+  bottomBtn1: {
+    backgroundColor: '#4CAF50',
+  },
+  bottomBtn2: {
+    backgroundColor: '#2196F3',
+  },
+  bottomBtn3: {
+    backgroundColor: '#9C27B0',
+  },
+  bottomBtn4: {
+    backgroundColor: '#F44336',
   },
   bottomBtnText: {
     color: 'white',
@@ -818,7 +831,7 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   narrowCell: {
-    width: Math.floor(CELL_WIDTH * 0.7),
+    width: NARROW_CELL_WIDTH,
   },
   highlight: {
     color: '#1a73e8',
