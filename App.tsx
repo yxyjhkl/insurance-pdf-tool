@@ -397,7 +397,18 @@ export default function App() {
     });
   };
 
-  
+  const handleViewPdf = async () => {
+    Alert.alert(
+      'PDF演示',
+      '选择演示文档',
+      [
+        { 
+          text: '产品计划书', 
+          onPress: () => {
+            Alert.alert('提示', 'PDF演示功能开发中...
+
+可以显示产品计划书PDF文件');
+          }
         },
         { text: '取消', style: 'cancel' }
       ]
@@ -585,7 +596,9 @@ export default function App() {
       )}
 
       <View style={styles.bottomRow}>
-        
+        <TouchableOpacity style={styles.btnBlue} onPress={handleViewPdf}>
+          <Text style={styles.btnText}>PDF演示</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.btnBlue} onPress={handleTutorial}>
           <Text style={styles.btnText}>使用教程</Text>
         </TouchableOpacity>
