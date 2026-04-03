@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Share, BackHandler, TextInput, Dimensions } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Share, BackHandler, TextInput, Dimensions, Modal } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import { StatusBar } from 'expo-status-bar';
 
@@ -31,7 +31,7 @@ const COLUMNS = [
 ];
 
 const screenWidth = Dimensions.get('window').width;
-const CELL_WIDTH = Math.floor((screenWidth - 20) / 4) + 5;
+const CELL_WIDTH = Math.floor((screenWidth - 20) / 6);
 
 const AVAILABLE_AGES = INSURANCE_DB.getAvailableAges('F');
 const GENDERS = [
@@ -47,6 +47,49 @@ export default function App() {
   const [data, setData] = useState<DataRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [showTable, setShowTable] = useState(false);
+  const [showAgePicker, setShowAgePicker] = useState(false);
+
+  const interpolateAgeData = (targetAge: number, gender: string, premium: number, dividendRate: number) => {
+    const ages = AVAILABLE_AGES.sort((a, b) => a - b);
+    if (ages.length < 2) return null;
+
+    let lowerAge = ages[0];
+    let upperAge = ages[ages.length - 1];
+    for (let i = 0; i < ages.length - 1; i++) {
+      if (ages[i] <= targetAge && targetAge <= ages[i + 1]) {
+        lowerAge = ages[i];
+        upperAge = ages[i + 1];
+        break;
+      }
+    }
+
+    const lowerData = INSURANCE_DB.getInsuranceData(lowerAge, gender, premium, dividendRate);
+    const upperData = INSURANCE_DB.getInsuranceData(upperAge, gender, premium, dividendRate);
+
+    if (!lowerData || !upperData) return null;
+
+    if (targetAge === lowerAge) return lowerData;
+    if (targetAge === upperAge) return upperData;
+
+    const ratio = (targetAge - lowerAge) / (upperAge - lowerAge);
+    
+    return lowerData.map((row, idx) => {
+      const upperRow = upperData[idx];
+      const result: any = { ...row };
+      
+      const keys: string[] = ['premium', 'total_premium', 'death_benefit', 'cash_value', 'current_dividend_cash', 'accum_dividend_cash', 'demo_survival', 'expected_survival'];
+      keys.forEach(key => {
+        const lowerVal = row[key as keyof DataRow];
+        const upperVal = upperRow[key as keyof DataRow];
+        if (typeof lowerVal === 'number' && typeof upperVal === 'number') {
+          (result as any)[key] = Math.round(lowerVal + (upperVal - lowerVal) * ratio);
+        }
+      });
+      
+      result.age = targetAge + idx;
+      return result;
+    });
+  };
 
   const formatNumber = (num: number | null | undefined): string => {
     if (num === null || num === undefined) return '--';
@@ -75,7 +118,14 @@ export default function App() {
 
     setLoading(true);
     setTimeout(() => {
-      const result = INSURANCE_DB.getInsuranceData(age, genderCode, premiumNum, rate);
+      let result: DataRow[] | null = null;
+      
+      if (AVAILABLE_AGES.includes(age)) {
+        result = INSURANCE_DB.getInsuranceData(age, genderCode, premiumNum, rate);
+      } else {
+        result = interpolateAgeData(age, genderCode, premiumNum, rate);
+      }
+      
       if (result && result.length > 0) {
         setData(result);
         setShowTable(true);
@@ -91,7 +141,12 @@ export default function App() {
     setDividendRate(newRate.toFixed(1));
     const premiumNum = parseFloat(premium);
     if (!isNaN(premiumNum) && premiumNum >= 25000) {
-      const result = INSURANCE_DB.getInsuranceData(age, gender, premiumNum, newRate);
+      let result: DataRow[] | null = null;
+      if (AVAILABLE_AGES.includes(age)) {
+        result = INSURANCE_DB.getInsuranceData(age, gender, premiumNum, newRate);
+      } else {
+        result = interpolateAgeData(age, gender, premiumNum, newRate);
+      }
       if (result) setData(result);
     }
   };
@@ -195,9 +250,43 @@ export default function App() {
                     <Text style={[styles.ageText, age === a && styles.ageTextActive]}>{getYearText(a)}</Text>
                   </TouchableOpacity>
                 ))}
+                <TouchableOpacity
+                  style={[styles.ageBtn, !AVAILABLE_AGES.includes(age) && styles.ageBtnActive]}
+                  onPress={() => setShowAgePicker(true)}
+                >
+                  <Text style={[styles.ageText, !AVAILABLE_AGES.includes(age) && styles.ageTextActive]}>自定义</Text>
+                </TouchableOpacity>
               </View>
             </ScrollView>
           </View>
+
+          <Modal visible={showAgePicker} transparent animationType="slide">
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>输入投保年龄 (0-65岁)</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={String(age)}
+                  onChangeText={(text) => {
+                    const num = parseInt(text);
+                    if (!isNaN(num) && num >= 0 && num <= 65) {
+                      setAge(num);
+                    }
+                  }}
+                  keyboardType="numeric"
+                  autoFocus
+                />
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity style={styles.modalBtnCancel} onPress={() => setShowAgePicker(false)}>
+                    <Text style={styles.modalBtnText}>取消</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.modalBtnConfirm} onPress={() => setShowAgePicker(false)}>
+                    <Text style={styles.modalBtnText}>确定</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
 
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>年交保费 (元)</Text>
@@ -539,5 +628,57 @@ const styles = StyleSheet.create({
   footerText: {
     color: '#999',
     fontSize: 11,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
+    width: '80%',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 15,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#1a73e8',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 24,
+    width: '100%',
+    textAlign: 'center',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    marginTop: 20,
+    gap: 15,
+  },
+  modalBtnCancel: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 6,
+    backgroundColor: '#999',
+    alignItems: 'center',
+  },
+  modalBtnConfirm: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 6,
+    backgroundColor: '#1a73e8',
+    alignItems: 'center',
+  },
+  modalBtnText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 });
