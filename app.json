@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "金尊分红建议书",
-    "slug": "jinzun-insurance",
+    "name": "金尊海外",
+    "slug": "jinzun-overseas",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -14,10 +14,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.jinzun.insurance"
+      "bundleIdentifier": "com.jinzun.overseas"
     },
     "android": {
-      "package": "com.jinzun.insurance",
+      "package": "com.jinzun.overseas",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1a73e8"

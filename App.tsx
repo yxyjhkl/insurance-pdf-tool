@@ -1,9 +1,128 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Share, BackHandler, TextInput, Dimensions, Modal } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import { StatusBar } from 'expo-status-bar';
 
 const INSURANCE_DB = require('./insurance_db.js');
+
+// Excel export helper
+const createExcelBuffer = (data: DataRow[], gender: string, age: number, premium: number, dividendRate: string): string => {
+  const header = ['保单年度', '年龄', '期交保费', '累计保费', '身故总利益', '主险现价', '现价增长率', '当年分红现价', '累计分红现价', '演示生存总利益', '演示增长率', '预期生存总利益', '预期增长率', '预期单利'];
+  
+  const rows = data.map(row => [
+    row.policy_year,
+    row.age,
+    row.premium,
+    row.total_premium,
+    row.death_benefit,
+    row.cash_value,
+    row.growth_rate !== null ? (row.growth_rate * 100).toFixed(2) + '%' : '--',
+    row.current_dividend_cash,
+    row.accum_dividend_cash,
+    row.demo_survival,
+    row.demo_rate !== null ? (row.demo_rate * 100).toFixed(2) + '%' : '--',
+    row.expected_survival,
+    row.expected_rate !== null ? (row.expected_rate * 100).toFixed(2) + '%' : '--',
+    row.expected_simple_rate !== null ? (row.expected_simple_rate * 100).toFixed(2) + '%' : '--',
+  ]);
+
+  let csv = header.join('\t') + '\n';
+  rows.forEach(row => {
+    csv += row.join('\t') + '\n';
+  });
+
+  // Add summary info
+  const infoRow = ['投保信息', gender === 'M' ? '男性' : '女性', age + '岁', premium + '元', '分红' + dividendRate + 'x'];
+  csv += '\n' + infoRow.join('\t');
+
+  return csv;
+};
+
+const exportToExcel = async (data: DataRow[], gender: string, age: number, premium: number, dividendRate: string) => {
+  if (data.length === 0) {
+    Alert.alert('提示', '请先计算数据');
+    return;
+  }
+
+  try {
+    const csvContent = createExcelBuffer(data, gender, age, parseFloat(premium), dividendRate);
+    const fileName = `金尊海外建议书_${new Date().getTime()}.xls`;
+    const filePath = FileSystem.documentDirectory + fileName;
+
+    await FileSystem.writeAsStringAsync(filePath, csvContent, {
+      encoding: FileSystem.EncodingType.UTF8,
+    });
+
+    Alert.alert('导出成功', `文件已保存: ${fileName}`, [
+      { text: '分享', onPress: () => Share.share({ message: filePath, url: filePath }) },
+      { text: '确定' }
+    ]);
+  } catch (error) {
+    Alert.alert('导出失败', '无法保存文件');
+  }
+};
+
+// Simple text to image (saves as HTML that can be viewed as image)
+const exportToImage = async (data: DataRow[], gender: string, age: number, premium: number, dividendRate: string) => {
+  if (data.length === 0) {
+    Alert.alert('提示', '请先计算数据');
+    return;
+  }
+
+  try {
+    let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+      body { font-family: Arial; padding: 10px; }
+      h2 { text-align: center; color: #1a73e8; }
+      .info { text-align: center; margin-bottom: 10px; color: #666; }
+      table { border-collapse: collapse; width: 100%; font-size: 10px; }
+      th { background: #1a73e8; color: white; padding: 6px; text-align: center; }
+      td { border: 1px solid #ddd; padding: 4px; text-align: right; }
+      tr:nth-child(even) { background: #f5f5f5; }
+      .highlight { color: #1a73e8; font-weight: bold; }
+    </style></head><body>`;
+    
+    html += `<h2>金尊海外建议书</h2>`;
+    html += `<p class="info">${gender === 'M' ? '男性' : '女性'} ${age}岁 | 年交保费 ${parseInt(premium).toLocaleString()}元 | 分红实现率 ${dividendRate}x</p>`;
+    html += `<table><tr><th>保单<br>年度</th><th>年龄</th><th>期交<br>保费</th><th>累计<br>保费</th><th>身故<br>总利益</th><th>主险<br>现价</th><th>现价<br>增长率</th><th>当年<br>分红现价</th><th>累计<br>分红现价</th><th>演示<br>生存</th><th>演示<br>增长率</th><th>预期<br>生存</th><th>预期<br>增长率</th><th>预期<br>单利</th></tr>`;
+    
+    data.forEach(row => {
+      const formatNum = (n: number) => Math.round(n).toLocaleString();
+      const formatRate = (r: number | null) => r === null ? '--' : (r * 100).toFixed(2) + '%';
+      html += `<tr>
+        <td>${row.policy_year}</td>
+        <td>${row.age}</td>
+        <td>${formatNum(row.premium)}</td>
+        <td>${formatNum(row.total_premium)}</td>
+        <td>${formatNum(row.death_benefit)}</td>
+        <td>${formatNum(row.cash_value)}</td>
+        <td>${formatRate(row.growth_rate)}</td>
+        <td>${formatNum(row.current_dividend_cash)}</td>
+        <td>${formatNum(row.accum_dividend_cash)}</td>
+        <td>${formatNum(row.demo_survival)}</td>
+        <td class="highlight">${formatRate(row.demo_rate)}</td>
+        <td>${formatNum(row.expected_survival)}</td>
+        <td>${formatRate(row.expected_rate)}</td>
+        <td>${formatRate(row.expected_simple_rate)}</td>
+      </tr>`;
+    });
+    
+    html += `</table></body></html>`;
+    
+    const fileName = `金尊海外建议书_${new Date().getTime()}.html`;
+    const filePath = FileSystem.documentDirectory + fileName;
+    
+    await FileSystem.writeAsStringAsync(filePath, html, {
+      encoding: FileSystem.EncodingType.UTF8,
+    });
+    
+    Alert.alert('导出成功', `文件已保存: ${fileName}\n可在浏览器中打开查看`, [
+      { text: '分享', onPress: () => Share.share({ message: filePath, url: filePath }) },
+      { text: '确定' }
+    ]);
+  } catch (error) {
+    Alert.alert('导出失败', '无法保存文件');
+  }
+};
 
 interface DataRow {
   policy_year: number;
@@ -210,7 +329,7 @@ export default function App() {
     <View style={styles.container}>
       <StatusBar style="light" />
       <View style={styles.header}>
-        <Text style={styles.title}>金尊分红司庆版建议书</Text>
+        <Text style={styles.title}>金尊海外建议书</Text>
         {showTable && (
           <Text style={styles.subtitle}>
             {gender === 'M' ? '男性' : '女性'} {age}岁 · {parseInt(premium).toLocaleString()}元 · 分红{dividendRate}x
@@ -373,8 +492,14 @@ export default function App() {
       )}
 
       <View style={styles.bottomRow}>
+        <TouchableOpacity style={styles.btnBlue} onPress={() => exportToExcel(data, gender, age, premium, dividendRate)}>
+          <Text style={styles.btnText}>导出Excel</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.btnGreen} onPress={exportToCSV}>
-          <Text style={styles.btnText}>导出CSV</Text>
+          <Text style={styles.btnText}>CSV</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.btnPurple} onPress={() => exportToImage(data, gender, age, premium, dividendRate)}>
+          <Text style={styles.btnText}>图片</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.btnRed} onPress={handleExit}>
           <Text style={styles.btnText}>退出</Text>
@@ -382,7 +507,7 @@ export default function App() {
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>金尊分红司庆版 v3.1 (数据库版)</Text>
+        <Text style={styles.footerText}>金尊海外 v3.2</Text>
       </View>
     </View>
   );
@@ -561,15 +686,31 @@ const styles = StyleSheet.create({
   btnGreen: {
     backgroundColor: '#4CAF50',
     paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingHorizontal: 10,
     borderRadius: 5,
     flex: 1,
-    marginRight: 10,
+    marginRight: 5,
+  },
+  btnBlue: {
+    backgroundColor: '#2196F3',
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 5,
+    flex: 1,
+    marginRight: 5,
+  },
+  btnPurple: {
+    backgroundColor: '#9C27B0',
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 5,
+    flex: 1,
+    marginRight: 5,
   },
   btnRed: {
     backgroundColor: '#F44336',
     paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingHorizontal: 10,
     borderRadius: 5,
     flex: 1,
   },

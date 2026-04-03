@@ -1,5 +1,5 @@
 {
-  "name": "金尊分红建议书",
+  "name": "金尊海外",
   "version": "1.0.0",
   "main": "index.ts",
   "scripts": {
@@ -14,10 +14,13 @@
     "expo-document-picker": "~13.0.0",
     "expo-file-system": "~18.0.0",
     "expo-image-picker": "~16.0.0",
+    "expo-media-library": "~17.0.0",
+    "expo-sharing": "~13.0.0",
     "expo-status-bar": "~3.0.9",
     "pdfjs-dist": "3.11.174",
     "react": "19.1.0",
-    "react-native": "0.81.5"
+    "react-native": "0.81.5",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
