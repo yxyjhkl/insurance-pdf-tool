@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Share, BackHandler, TextInput, Dimensions, Modal } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import { StatusBar } from 'expo-status-bar';
@@ -152,8 +152,8 @@ const COLUMNS = [
 const screenWidth = Dimensions.get('window').width;
 const CELL_WIDTH = Math.floor((screenWidth - 20) / 6);
 
-const ALL_AGES_F = INSURANCE_DB.getAvailableAges('F');
-const ALL_AGES_M = INSURANCE_DB.getAvailableAges('M');
+const ALL_AGES_F: number[] = INSURANCE_DB.getAvailableAges('F');
+const ALL_AGES_M: number[] = INSURANCE_DB.getAvailableAges('M');
 const GENDERS = [
   { label: '男性', value: 'M' },
   { label: '女性', value: 'F' },
@@ -169,27 +169,30 @@ export default function App() {
   const [showTable, setShowTable] = useState(false);
   const [showAgePicker, setShowAgePicker] = useState(false);
   const [tempAge, setTempAge] = useState('30');
+
   const getMaxAge = () => gender === 'M' ? 62 : 65;
 
-  const getAvailableAges = () => {
+  const getAvailableAges = (): number[] => {
     return gender === 'M' ? ALL_AGES_M : ALL_AGES_F;
   };
 
-  const getFilteredAges = () => {
+  const getFilteredAges = (): number[] => {
     const maxAge = getMaxAge();
-    return getAvailableAges().filter(a => a <= maxAge);
+    return getAvailableAges().filter((a: number) => a <= maxAge);
   };
 
-  const interpolateAgeData = (targetAge: number, genderCode: string, premium: number, dividendRate: number) => {
-    const ages = getAvailableAges().sort((a: number, b: number) => a - b);
-    if (ages.length < 2) return null;
+  const interpolateAgeData = (targetAge: number, genderCode: string, premium: number, dividendRate: number): DataRow[] | null => {
+    const ages = getAvailableAges();
+    if (!ages || ages.length < 2) return null;
 
-    let lowerAge = ages[0];
-    let upperAge = ages[ages.length - 1];
-    for (let i = 0; i < ages.length - 1; i++) {
-      if (ages[i] <= targetAge && targetAge <= ages[i + 1]) {
-        lowerAge = ages[i];
-        upperAge = ages[i + 1];
+    const sortedAges = [...ages].sort((a, b) => a - b);
+    
+    let lowerAge = sortedAges[0];
+    let upperAge = sortedAges[sortedAges.length - 1];
+    for (let i = 0; i < sortedAges.length - 1; i++) {
+      if (sortedAges[i] <= targetAge && targetAge <= sortedAges[i + 1]) {
+        lowerAge = sortedAges[i];
+        upperAge = sortedAges[i + 1];
         break;
       }
     }
@@ -206,16 +209,16 @@ export default function App() {
     
     return lowerData.map((row, idx) => {
       const upperRow = upperData[idx];
-      const result: any = { ...row };
+      const result = { ...row };
       
-      const keys: string[] = ['premium', 'total_premium', 'death_benefit', 'cash_value', 'current_dividend_cash', 'accum_dividend_cash', 'demo_survival', 'expected_survival'];
-      keys.forEach(key => {
-        const lowerVal = row[key as keyof DataRow];
-        const upperVal = upperRow[key as keyof DataRow];
+      const keys = ['premium', 'total_premium', 'death_benefit', 'cash_value', 'current_dividend_cash', 'accum_dividend_cash', 'demo_survival', 'expected_survival'];
+      for (const key of keys) {
+        const lowerVal = (row as any)[key];
+        const upperVal = (upperRow as any)[key];
         if (typeof lowerVal === 'number' && typeof upperVal === 'number') {
           (result as any)[key] = Math.round(lowerVal + (upperVal - lowerVal) * ratio);
         }
-      });
+      }
       
       result.age = targetAge + idx;
       return result;
