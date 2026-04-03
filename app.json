@@ -27,8 +27,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-document-picker",
-      "react-native-view-shot"
+      "expo-document-picker"
     ],
     "extra": {
       "eas": {
