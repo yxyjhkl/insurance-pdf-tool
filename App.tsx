@@ -32,12 +32,7 @@ const COLUMNS = [
 const screenWidth = Dimensions.get('window').width;
 const CELL_WIDTH = Math.floor((screenWidth - 20) / 4) + 5;
 
-const PAYMENT_YEARS = 8;
-const BASE_PREMIUM = 100000;
-const BASE_AGE = 40;
-const GUARANTEED_RATE = 1.05;
-const DIVIDEND_RATE = 0.03;
-const CASH_VALUE_GROWTH = 0.0175;
+
 
 export default function App() {
   const [dividendRate, setDividendRate] = useState<string>('1.6');
