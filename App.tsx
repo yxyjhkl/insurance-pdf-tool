@@ -1,9 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Share, BackHandler, TextInput, Dimensions, Modal } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import { StatusBar } from 'expo-status-bar';
 import * as XLSX from 'xlsx';
-import ViewShot from 'react-native-view-shot';
 
 const INSURANCE_DB = require('./insurance_db.js');
 
@@ -69,46 +68,64 @@ const exportToExcel = async (data: DataRow[], gender: string, age: number, premi
   }
 };
 
-const captureRef = useRef<ViewShot>(null);
-const [capturing, setCapturing] = useState(false);
+const exportToHTML = async (data: DataRow[], gender: string, age: number, premium: number, dividendRate: number) => {
+  if (data.length === 0) {
+    Alert.alert('提示', '请先计算数据');
+    return;
+  }
 
-  const exportToImage = async () => {
-    if (data.length === 0) {
-      Alert.alert('提示', '请先计算数据');
-      return;
-    }
-    if (!captureRef.current) {
-      Alert.alert('错误', '截图组件未就绪');
-      return;
-    }
-
-    try {
-      setCapturing(true);
-      const uri = await captureRef.current.capture?.({
-        format: 'jpg',
-        quality: 0.92,
-        result: 'tmpfile',
-      });
-
-      if (!uri) {
-        Alert.alert('导出失败', '截图失败');
-        return;
-      }
-
-      const fileName = `金尊海外建议书_${new Date().getTime()}.jpg`;
-      const destPath = FileSystem.documentDirectory + fileName;
-      await FileSystem.copyAsync({ from: uri, to: destPath });
-
-      Alert.alert('导出成功', `图片已保存: ${fileName}`, [
-        { text: '分享', onPress: () => Share.share({ message: destPath, url: destPath }) },
-        { text: '确定' }
-      ]);
-    } catch (error) {
-      Alert.alert('导出失败', '无法保存图片');
-    } finally {
-      setCapturing(false);
-    }
-  };
+  try {
+    let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+      body { font-family: Arial; padding: 10px; }
+      h2 { text-align: center; color: #1a73e8; }
+      .info { text-align: center; margin-bottom: 10px; color: #666; }
+      table { border-collapse: collapse; width: 100%; font-size: 10px; }
+      th { background: #1a73e8; color: white; padding: 6px; text-align: center; }
+      td { border: 1px solid #ddd; padding: 4px; text-align: right; }
+      tr:nth-child(even) { background: #f5f5f5; }
+      .highlight { color: #1a73e8; font-weight: bold; }
+    </style></head><body>`;
+    
+    html += `<h2>金尊海外建议书</h2>`;
+    html += `<p class="info">${gender === 'M' ? '男性' : '女性'} ${age}岁 | 年交保费 ${parseInt(premium).toLocaleString()}元 | 分红实现率 ${dividendRate}x</p>`;
+    html += `<table><tr><th>保单<br>年度</th><th>年龄</th><th>身故<br>总利益</th><th>主险<br>现价</th><th>现价<br>增长率</th><th>当年<br>分红现价</th><th>累计<br>分红现价</th><th>演示<br>生存</th><th>演示<br>增长率</th><th>预期<br>生存</th><th>预期<br>增长率</th><th>预期<br>单利</th></tr>`;
+    
+    data.forEach(row => {
+      const formatNum = (n: number) => Math.round(n).toLocaleString();
+      const formatRate = (r: number | null) => r === null ? '--' : (r * 100).toFixed(2) + '%';
+      html += `<tr>
+        <td>${row.policy_year}</td>
+        <td>${row.age}</td>
+        <td>${formatNum(row.death_benefit)}</td>
+        <td>${formatNum(row.cash_value)}</td>
+        <td>${formatRate(row.growth_rate)}</td>
+        <td>${formatNum(row.current_dividend_cash)}</td>
+        <td>${formatNum(row.accum_dividend_cash)}</td>
+        <td>${formatNum(row.demo_survival)}</td>
+        <td class="highlight">${formatRate(row.demo_rate)}</td>
+        <td>${formatNum(row.expected_survival)}</td>
+        <td>${formatRate(row.expected_rate)}</td>
+        <td>${formatRate(row.expected_simple_rate)}</td>
+      </tr>`;
+    });
+    
+    html += `</table></body></html>`;
+    
+    const fileName = `金尊海外建议书_${new Date().getTime()}.html`;
+    const filePath = FileSystem.documentDirectory + fileName;
+    
+    await FileSystem.writeAsStringAsync(filePath, html, {
+      encoding: FileSystem.EncodingType.UTF8,
+    });
+    
+    Alert.alert('导出成功', `文件已保存: ${fileName}\n可在浏览器中打开查看`, [
+      { text: '分享', onPress: () => Share.share({ message: filePath, url: filePath }) },
+      { text: '确定' }
+    ]);
+  } catch (error) {
+    Alert.alert('导出失败', '无法保存文件');
+  }
+};
 
 interface DataRow {
   policy_year: number;
@@ -625,40 +642,6 @@ export default function App() {
               </ScrollView>
             </ScrollView>
           ) : null}
-
-          <View style={styles.captureContainer}>
-            <ViewShot ref={captureRef} options={{ format: 'jpg', quality: 0.92, result: 'tmpfile' }}>
-              <View style={styles.captureContent}>
-                <Text style={styles.captureTitle}>金尊海外建议书</Text>
-                <Text style={styles.captureInfo}>
-                  {gender === 'M' ? '男性' : '女性'} {age}岁 | 年交保费 {parseInt(premium).toLocaleString()}元 | 分红实现率 {dividendRate}x
-                </Text>
-                <View style={styles.captureTable}>
-                  <View style={styles.captureHeaderRow}>
-                    {COLUMNS.map((col, idx) => (
-                      <Text key={idx} style={[styles.captureHeaderCell, { width: col.width }]}>{col.name}</Text>
-                    ))}
-                  </View>
-                  {data.map((row, index) => (
-                    <View key={row.policy_year} style={[styles.captureDataRow, index % 2 === 1 && styles.captureDataRowAlt]}>
-                      <Text style={[styles.captureDataCell, { width: COLUMNS[0].width }]}>{row.policy_year}</Text>
-                      <Text style={[styles.captureDataCell, { width: COLUMNS[1].width }]}>{row.age}</Text>
-                      <Text style={[styles.captureDataCell, { width: COLUMNS[2].width }]}>{formatNumber(row.death_benefit)}</Text>
-                      <Text style={[styles.captureDataCell, { width: COLUMNS[3].width }]}>{formatNumber(row.cash_value)}</Text>
-                      <Text style={[styles.captureDataCell, { width: COLUMNS[4].width }]}>{formatRate(row.growth_rate)}</Text>
-                      <Text style={[styles.captureDataCell, { width: COLUMNS[5].width }]}>{formatNumber(row.current_dividend_cash)}</Text>
-                      <Text style={[styles.captureDataCell, { width: COLUMNS[6].width }]}>{formatNumber(row.accum_dividend_cash)}</Text>
-                      <Text style={[styles.captureDataCell, { width: COLUMNS[7].width }]}>{formatNumber(row.demo_survival)}</Text>
-                      <Text style={[styles.captureDataCell, styles.captureHighlight, { width: COLUMNS[8].width }]}>{formatRate(row.demo_rate)}</Text>
-                      <Text style={[styles.captureDataCell, { width: COLUMNS[9].width }]}>{formatNumber(row.expected_survival)}</Text>
-                      <Text style={[styles.captureDataCell, { width: COLUMNS[10].width }]}>{formatRate(row.expected_rate)}</Text>
-                      <Text style={[styles.captureDataCell, { width: COLUMNS[11].width }]}>{formatSimpleRate(row.expected_simple_rate)}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            </ViewShot>
-          </View>
         </>
       )}
 
@@ -669,8 +652,8 @@ export default function App() {
         <TouchableOpacity style={[styles.bottomBtn, styles.bottomBtn2]} onPress={exportToCSV}>
           <Text style={styles.bottomBtnText}>导出CSV</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.bottomBtn, styles.bottomBtn3]} onPress={exportToImage} disabled={capturing}>
-          <Text style={styles.bottomBtnText}>{capturing ? '导出中...' : '导出图片'}</Text>
+        <TouchableOpacity style={[styles.bottomBtn, styles.bottomBtn3]} onPress={() => exportToHTML(data, gender, age, premium, dividendRate)}>
+          <Text style={styles.bottomBtnText}>导出网页</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.bottomBtn, styles.bottomBtn4]} onPress={handleExit}>
           <Text style={styles.bottomBtnText}>退出程序</Text>
@@ -1157,63 +1140,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#666',
     lineHeight: 20,
-  },
-  captureContainer: {
-    position: 'absolute',
-    left: -9999,
-    top: 0,
-    width: 600,
-  },
-  captureContent: {
-    backgroundColor: 'white',
-    padding: 15,
-  },
-  captureTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1a73e8',
-    textAlign: 'center',
-    marginBottom: 5,
-  },
-  captureInfo: {
-    fontSize: 11,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  captureTable: {
-    borderWidth: 1,
-    borderColor: '#dadce0',
-  },
-  captureHeaderRow: {
-    flexDirection: 'row',
-    backgroundColor: '#1a73e8',
-  },
-  captureHeaderCell: {
-    padding: 4,
-    color: 'white',
-    fontSize: 9,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  captureDataRow: {
-    flexDirection: 'row',
-    height: 22,
-    backgroundColor: 'white',
-  },
-  captureDataRowAlt: {
-    backgroundColor: '#e8f0fe',
-  },
-  captureDataCell: {
-    padding: 3,
-    fontSize: 9,
-    textAlign: 'center',
-    color: '#333',
-    borderWidth: 0.5,
-    borderColor: '#dadce0',
-  },
-  captureHighlight: {
-    color: '#1a73e8',
-    fontWeight: 'bold',
   },
 });
