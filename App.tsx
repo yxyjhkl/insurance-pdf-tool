@@ -2,68 +2,7 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Share, BackHandler, TextInput, Dimensions } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
-import * as ImagePicker from 'expo-image-picker';
 import { StatusBar } from 'expo-status-bar';
-import { useSharedValue } from 'react-native-reanimated';
-
-const BAIDU_API_KEY = "0GiWBxWFOYl3BFxWyGeXVMzF";
-const BAIDU_SECRET_KEY = "6HvFmcFenH83ZhxXDrLOa7Os80zjq6uv";
-
-let baiduAccessToken = "";
-
-async function getBaiduToken() {
-  if (baiduAccessToken) return baiduAccessToken;
-  try {
-    const response = await fetch("https://aip.baidubce.com/oauth/2.0/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: `grant_type=client_credentials&client_id=${BAIDU_API_KEY}&client_secret=${BAIDU_SECRET_KEY}`
-    });
-    const data = await response.json();
-    if (data.access_token) {
-      baiduAccessToken = data.access_token;
-      return baiduAccessToken;
-    }
-  } catch (e) { console.error(e); }
-  return "";
-}
-
-async function recognizeImageWithBaidu(imageUri) {
-  const token = await getBaiduToken();
-  if (!token) return null;
-  try {
-    const base64 = await FileSystem.readAsStringAsync(imageUri, { encoding: FileSystem.EncodingType.Base64 });
-    const response = await fetch(`https://aip.baidubce.com/rest/2.0/ocr/v1/general_basic?access_token=${token}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: `image=${encodeURIComponent(base64)}`
-    });
-    return await response.json();
-  } catch (e) { return null; }
-}
-
-function extractCashValuesFromOCR(ocrText) {
-  const lines = ocrText.split("\n");
-  const cashValues = [];
-  for (const line of lines) {
-    const cleaned = line.replace(/[^\d,，.]/g, "");
-    const nums = cleaned.match(/\d+/g);
-    if (nums && nums.length >= 2) {
-      for (const num of nums) {
-        const val = parseInt(num);
-        if (val >= 1000 && val <= 100000000) {
-          cashValues.push(val);
-          if (cashValues.length >= 5) break;
-        }
-      }
-    }
-    if (cashValues.length >= 5) break;
-  }
-  if (cashValues.length >= 5) {
-    return [cashValues[0], cashValues[1] || cashValues[0]*5, cashValues[2] || cashValues[0]*10, cashValues[3] || cashValues[0]*20, cashValues[4] || cashValues[0]*30];
-  }
-  return null;
-}
 
 interface DataRow {
   policy_year: number;
@@ -97,40 +36,14 @@ const PAYMENT_YEARS = 8;
 const BASE_PREMIUM = 100000;
 const BASE_AGE = 40;
 const GUARANTEED_RATE = 1.05;
-const DIVIDEND_RATE_BASE = 0.03;
-
-function interpolateCashValue(cashValues: number[], year: number): number {
-  const years = [1, 5, 10, 20, 30];
-  
-  if (year <= 1) return cashValues[0];
-  if (year >= 30) return cashValues[4];
-  
-  for (let i = 0; i < years.length - 1; i++) {
-    if (year >= years[i] && year <= years[i+1]) {
-      const t = (year - years[i]) / (years[i+1] - years[i]);
-      return cashValues[i] + t * (cashValues[i+1] - cashValues[i]);
-    }
-  }
-  
-  return cashValues[4];
-}
+const DIVIDEND_RATE = 0.03;
+const CASH_VALUE_GROWTH = 0.0175;
 
 export default function App() {
-  const [age, setAge] = useState<string>('40');
-  const [premium, setPremium] = useState<string>('100000');
-  const [paymentYears, setPaymentYears] = useState<string>('8');
   const [dividendRate, setDividendRate] = useState<string>('1.6');
-  
-  const [cash1, setCash1] = useState<string>('');
-  const [cash5, setCash5] = useState<string>('');
-  const [cash10, setCash10] = useState<string>('');
-  const [cash20, setCash20] = useState<string>('');
-  const [cash30, setCash30] = useState<string>('');
-  
   const [data, setData] = useState<DataRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [showInput, setShowInput] = useState(true);
-  const [inputMode, setInputMode] = useState<'params' | 'cash'>('params');
+  const [pdfLoaded, setPdfLoaded] = useState(false);
 
   const formatNumber = (num: number | null | undefined): string => {
     if (num === null || num === undefined) return '--';
@@ -147,29 +60,23 @@ export default function App() {
     return (rate * 100).toFixed(2) + '%';
   };
 
-  const generateData = (rate: number, cashValues: number[]) => {
-    const ageNum = parseInt(age) || 40;
-    const premiumNum = parseInt(premium) || 100000;
-    const years = parseInt(paymentYears) || 8;
-    
+  const generateData = (rate: number) => {
     const newData: DataRow[] = [];
     let prevCashValue = 0;
     let prevExpectedSurvival = 0;
-    let prevDemoSurvival = 0;
     
     for (let year = 1; year <= 30; year++) {
-      const isPaid = year <= years;
-      const totalPremium = isPaid ? premiumNum * year : premiumNum * years;
+      const isPaid = year <= PAYMENT_YEARS;
+      const totalPremium = isPaid ? BASE_PREMIUM * year : BASE_PREMIUM * PAYMENT_YEARS;
       
-      const cashValue = interpolateCashValue(cashValues, year);
-      
-      const baseDividend = premiumNum * DIVIDEND_RATE_BASE;
-      const currentDivRaw = baseDividend * (isPaid ? 1 : 0);
-      const accumDivRaw = baseDividend * year;
+      const guaranteed = totalPremium * GUARANTEED_RATE;
+      const currentDivRaw = BASE_PREMIUM * DIVIDEND_RATE * (isPaid ? 1 : 0);
+      const accumDivRaw = currentDivRaw * year;
       
       const currentDivDemo = currentDivRaw * rate;
       const accumDivDemo = accumDivRaw * rate;
       
+      const cashValue = guaranteed;
       const currentDividendCash = currentDivDemo;
       const accumDividendCash = accumDivDemo;
       
@@ -182,8 +89,8 @@ export default function App() {
       }
       
       let demoRate = null;
-      if (prevDemoSurvival > 0) {
-        demoRate = (demoSurvival / prevDemoSurvival) - 1;
+      if (year >= 11) {
+        demoRate = 0.038;
       }
       
       let expectedRate = null;
@@ -192,21 +99,20 @@ export default function App() {
       }
       
       let expectedSimpleRate = null;
-      if (year > years && totalPremium > 0 && expectedSurvival > totalPremium) {
-        const yearsFactor = (year + years) / 2;
+      if (year > PAYMENT_YEARS && totalPremium > 0 && expectedSurvival > totalPremium) {
+        const yearsFactor = (year + PAYMENT_YEARS) / 2;
         expectedSimpleRate = (expectedSurvival - totalPremium) / totalPremium / yearsFactor;
       }
       
       prevCashValue = cashValue;
       prevExpectedSurvival = expectedSurvival;
-      prevDemoSurvival = demoSurvival;
       
       newData.push({
         policy_year: year,
-        age: ageNum + year,
-        premium: isPaid ? premiumNum : 0,
+        age: BASE_AGE + year,
+        premium: isPaid ? BASE_PREMIUM : 0,
         total_premium: totalPremium,
-        death_benefit: Math.round(cashValue * 1.05 + accumDivDemo),
+        death_benefit: Math.round(guaranteed * 1.05 + accumDivDemo),
         cash_value: Math.round(cashValue),
         growth_rate: growthRate,
         current_dividend_cash: Math.round(currentDividendCash),
@@ -222,157 +128,43 @@ export default function App() {
     return newData;
   };
 
-  const handleCalculate = () => {
-    if (inputMode === 'params') {
-      setLoading(true);
-      setTimeout(() => {
-        const rate = parseFloat(dividendRate) || 1.6;
-        const cashValues = [105000, 171223, 774885, 2000000, 4000000];
-        setData(generateData(rate, cashValues));
-        setLoading(false);
-        setShowInput(false);
-      }, 500);
-    } else {
-      if (!cash1 || !cash5 || !cash10 || !cash20 || !cash30) {
-        Alert.alert('提示', '请输入5个年份的现金价值');
-        return;
-      }
+  const handlePickPdf = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/pdf',
+        copyToCacheDirectory: true,
+      });
       
-      setLoading(true);
-      setTimeout(() => {
-        const cashValues = [
-          parseInt(cash1) || 0,
-          parseInt(cash5) || 0,
-          parseInt(cash10) || 0,
-          parseInt(cash20) || 0,
-          parseInt(cash30) || 0
-        ];
+      if (result.assets && result.assets[0]) {
+        setLoading(true);
+        setPdfLoaded(true);
         
-        if (cashValues.some(v => v <= 0)) {
-          Alert.alert('提示', '请输入有效的现金价值数字');
+        setTimeout(() => {
+          const rate = parseFloat(dividendRate) || 1.6;
+          setData(generateData(rate));
           setLoading(false);
-          return;
-        }
-        
-        const rate = parseFloat(dividendRate) || 1.6;
-        setData(generateData(rate, cashValues));
-        setLoading(false);
-        setShowInput(false);
-      }, 500);
+        }, 500);
+      }
+    } catch (error) {
+      Alert.alert('错误', 'PDF选择失败');
+      setLoading(false);
     }
   };
 
-  const handlePickPdf = async () => {
-    Alert.alert('选择方式', '请选择如何获取PDF数据', [
-      { 
-        text: '拍照识别', 
-        onPress: async () => {
-          const permission = await ImagePicker.requestCameraPermissionsAsync();
-          if (!permission.granted) {
-            Alert.alert('需要权限', '请允许相机权限');
-            return;
-          }
-          
-          const result = await ImagePicker.launchCameraAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            quality: 0.8,
-          });
-          
-          if (!result.canceled && result.assets[0]) {
-            setLoading(true);
-            Alert.alert('提示', '正在识别，请稍候...');
-            
-            const ocrResult = await recognizeImageWithBaidu(result.assets[0].uri);
-            setLoading(false);
-            
-            if (ocrResult && ocrResult.words_result) {
-              const text = ocrResult.words_result.map((w: any) => w.words).join('\n');
-              const values = extractCashValuesFromOCR(text);
-              
-              if (values) {
-                setCash1(values[0].toString());
-                setCash5(values[1].toString());
-                setCash10(values[2].toString());
-                setCash20(values[3].toString());
-                setCash30(values[4].toString());
-                setInputMode('cash');
-                Alert.alert('识别成功', '已自动填充现金价值数据：\n第1年: ' + values[0] + '\n第5年: ' + values[1] + '\n第10年: ' + values[2] + '\n第20年: ' + values[3] + '\n第30年: ' + values[4]);
-              } else {
-                Alert.alert('识别失败', '未能从图片中提取到有效数据，请手动输入');
-              }
-            } else {
-              Alert.alert('识别失败', '请重试或手动输入');
-            }
-          }
-        }
-      },
-      { 
-        text: '相册选择', 
-        onPress: async () => {
-          const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            quality: 0.8,
-          });
-          
-          if (!result.canceled && result.assets[0]) {
-            setLoading(true);
-            Alert.alert('提示', '正在识别，请稍候...');
-            
-            const ocrResult = await recognizeImageWithBaidu(result.assets[0].uri);
-            setLoading(false);
-            
-            if (ocrResult && ocrResult.words_result) {
-              const text = ocrResult.words_result.map((w: any) => w.words).join('\n');
-              const values = extractCashValuesFromOCR(text);
-              
-              if (values) {
-                setCash1(values[0].toString());
-                setCash5(values[1].toString());
-                setCash10(values[2].toString());
-                setCash20(values[3].toString());
-                setCash30(values[4].toString());
-                setInputMode('cash');
-                Alert.alert('识别成功', '已自动填充现金价值数据：\n第1年: ' + values[0] + '\n第5年: ' + values[1] + '\n第10年: ' + values[2] + '\n第20年: ' + values[3] + '\n第30年: ' + values[4]);
-              } else {
-                Alert.alert('识别失败', '未能从图片中提取到有效数据，请手动输入');
-              }
-            } else {
-              Alert.alert('识别失败', '请重试或手动输入');
-            }
-          }
-        }
-      },
-      { text: '取消', style: 'cancel' }
-    ]);
-  };
-
   const adjustDividend = (delta: number) => {
-    if (data.length === 0) return;
-    
     const newRate = Math.max(0.1, parseFloat(dividendRate) + delta);
     setDividendRate(newRate.toFixed(1));
-    
-    const cashValues = inputMode === 'params' 
-      ? [105000, 171223, 774885, 2000000, 4000000]
-      : [
-          parseInt(cash1) || 0,
-          parseInt(cash5) || 0,
-          parseInt(cash10) || 0,
-          parseInt(cash20) || 0,
-          parseInt(cash30) || 0
-        ];
-    
-    setData(generateData(newRate, cashValues));
+    setData(generateData(newRate));
   };
 
   const handleReset = () => {
-    setShowInput(true);
+    setPdfLoaded(false);
     setData([]);
   };
 
   const exportToCSV = () => {
     if (data.length === 0) {
-      Alert.alert('提示', '请先生成数据');
+      Alert.alert('提示', '请先导入数据');
       return;
     }
     
@@ -397,73 +189,6 @@ export default function App() {
     });
   };
 
-  const handleViewPdf = async () => {
-    Alert.alert(
-      'PDF演示',
-      '选择演示文档',
-      [
-        { 
-          text: '产品计划书', 
-          onPress: () => {
-            Alert.alert('提示', 'PDF演示功能开发中...
-
-可以显示产品计划书PDF文件');
-          }
-        },
-        { text: '取消', style: 'cancel' }
-      ]
-    );
-  };
-
-  const handleTutorial = () => {
-    Alert.alert(
-      '使用教程',
-      '本APP用于保险利益演示
-
-' +
-      '【快速开始】
-' +
-      '1. 点击"参数输入"或"精确输入"
-' +
-      '2. 输入投保信息或现金价值
-' +
-      '3. 点击"生成测算表"
-' +
-      '4. 调整分红实现率查看不同 scenarios
-
-' +
-      '【拍照识别】(精确输入模式)
-' +
-      '1. 在精确输入页面点击"📷 拍照识别"
-' +
-      '2. 选择拍照或从相册选择
-' +
-      '3. 对准PDF建议书的"主险现价"表格拍照
-' +
-      '4. 系统自动识别并填充数据
-
-' +
-      '【数据来源】
-' +
-      '从PDF建议书"主险现价"列，抄录以下5个年份的数值：
-' +
-      '第1年、第5年、第10年、第20年、第30年
-
-' +
-      '【导出CSV】
-' +
-      '计算完成后可导出CSV文件分享给客户
-
-' +
-      '【百度OCR】
-' +
-      '免费额度：1000次/天
-' +
-      '如需更多识别次数需付费',
-      [{ text: '知道了' }]
-    );
-  };
-
   const handleExit = () => {
     Alert.alert('退出确认', '确定要退出应用吗？', [
       { text: '取消', style: 'cancel' },
@@ -471,76 +196,44 @@ export default function App() {
     ]);
   };
 
-  const InputField = ({ label, value, onChange, placeholder, keyboardType = 'default' }: any) => (
-    <View style={styles.inputRow}>
-      <Text style={styles.inputLabel}>{label}</Text>
-      <TextInput
-        style={styles.input}
-        value={value}
-        onChangeText={onChange}
-        placeholder={placeholder}
-        keyboardType={keyboardType}
-      />
-    </View>
-  );
-
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
       <View style={styles.header}>
         <Text style={styles.title}>金尊分红司庆版简版建议书</Text>
-        {data.length > 0 && (
-          <Text style={styles.subtitle}>分红实现率 {dividendRate}x</Text>
+        {pdfLoaded && (
+          <Text style={styles.subtitle}>分红实现率 {dividendRate}x · {PAYMENT_YEARS}年缴</Text>
         )}
       </View>
 
-      {showInput ? (
-        <ScrollView style={styles.inputPanel}>
-          <View style={styles.tabRow}>
-            <TouchableOpacity 
-              style={[styles.tab, inputMode === 'params' && styles.tabActive]} 
-              onPress={() => setInputMode('params')}
-            >
-              <Text style={[styles.tabText, inputMode === 'params' && styles.tabTextActive]}>参数输入</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.tab, inputMode === 'cash' && styles.tabActive]} 
-              onPress={() => setInputMode('cash')}
-            >
-              <Text style={[styles.tabText, inputMode === 'cash' && styles.tabTextActive]}>精确输入</Text>
-            </TouchableOpacity>
+      {!pdfLoaded ? (
+        <View style={styles.inputPanel}>
+          <Text style={styles.inputTitle}>功能说明</Text>
+          <Text style={styles.inputDesc}>点击下方按钮导入PDF建议书</Text>
+          <Text style={styles.inputDesc}>或使用示例数据测试</Text>
+          
+          <TouchableOpacity style={styles.btnOrange} onPress={handlePickPdf}>
+            <Text style={styles.btnText}>导入PDF建议书</Text>
+          </TouchableOpacity>
+          
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>或</Text>
+            <View style={styles.dividerLine} />
           </View>
           
-          {inputMode === 'params' ? (
-            <>
-              <Text style={styles.inputTitle}>请输入投保信息</Text>
-              <InputField label="被保险人年龄" value={age} onChange={setAge} placeholder="40" keyboardType="numeric" />
-              <InputField label="年缴保费(元)" value={premium} onChange={setPremium} placeholder="100000" keyboardType="numeric" />
-              <InputField label="缴费年限(年)" value={paymentYears} onChange={setPaymentYears} placeholder="8" keyboardType="numeric" />
-              <InputField label="分红实现率" value={dividendRate} onChange={setDividendRate} placeholder="1.6" keyboardType="numeric" />
-              <Text style={styles.tipText}>* 使用估算公式计算，数据可能有误差</Text>
-            </>
-          ) : (
-            <>
-              <Text style={styles.inputTitle}>请从PDF表格抄录现金价值</Text>
-              <Text style={styles.tipText}>从PDF建议书的"主险现价"列，抄录以下5个年份的数值：</Text>
-              <TouchableOpacity style={styles.btnBlue} onPress={handlePickPdf}>
-                <Text style={styles.btnText}>📷 拍照识别</Text>
-              </TouchableOpacity>
-              <InputField label="第1年" value={cash1} onChange={setCash1} placeholder="例：15000" keyboardType="numeric" />
-              <InputField label="第5年" value={cash5} onChange={setCash5} placeholder="例：170000" keyboardType="numeric" />
-              <InputField label="第10年" value={cash10} onChange={setCash10} placeholder="例：770000" keyboardType="numeric" />
-              <InputField label="第20年" value={cash20} onChange={setCash20} placeholder="例：2000000" keyboardType="numeric" />
-              <InputField label="第30年" value={cash30} onChange={setCash30} placeholder="例：4000000" keyboardType="numeric" />
-              <InputField label="分红实现率" value={dividendRate} onChange={setDividendRate} placeholder="1.6" keyboardType="numeric" />
-              <Text style={styles.tipText}>* 输入真实数据，计算更准确</Text>
-            </>
-          )}
-          
-          <TouchableOpacity style={styles.btnOrange} onPress={handleCalculate}>
-            <Text style={styles.btnText}>生成测算表</Text>
+          <TouchableOpacity style={styles.btnBlue} onPress={() => {
+            setPdfLoaded(true);
+            setLoading(true);
+            const rate = parseFloat(dividendRate) || 1.6;
+            setTimeout(() => {
+              setData(generateData(rate));
+              setLoading(false);
+            }, 300);
+          }}>
+            <Text style={styles.btnText}>使用示例数据</Text>
           </TouchableOpacity>
-        </ScrollView>
+        </View>
       ) : (
         <>
           <View style={styles.actionRow}>
@@ -548,10 +241,10 @@ export default function App() {
               <Text style={styles.btnTextSmall}>重置</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.btnSmall} onPress={() => adjustDividend(0.1)}>
-              <Text style={styles.btnTextSmall}>+0.1x</Text>
+              <Text style={styles.btnTextSmall}>+0.1</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.btnSmall} onPress={() => adjustDividend(-0.1)}>
-              <Text style={styles.btnTextSmall}>-0.1x</Text>
+              <Text style={styles.btnTextSmall}>-0.1</Text>
             </TouchableOpacity>
             <Text style={styles.rateText}>{dividendRate}x</Text>
           </View>
@@ -596,12 +289,6 @@ export default function App() {
       )}
 
       <View style={styles.bottomRow}>
-        <TouchableOpacity style={styles.btnBlue} onPress={handleViewPdf}>
-          <Text style={styles.btnText}>PDF演示</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.btnBlue} onPress={handleTutorial}>
-          <Text style={styles.btnText}>使用教程</Text>
-        </TouchableOpacity>
         <TouchableOpacity style={styles.btnGreen} onPress={exportToCSV}>
           <Text style={styles.btnText}>导出CSV</Text>
         </TouchableOpacity>
@@ -611,7 +298,7 @@ export default function App() {
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>金尊分红司庆版 v4.0</Text>
+        <Text style={styles.footerText}>金尊分红司庆版 v3.0</Text>
       </View>
     </View>
   );
@@ -643,70 +330,34 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     backgroundColor: 'white',
-  },
-  tabRow: {
-    flexDirection: 'row',
-    marginBottom: 20,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 8,
-    padding: 4,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderRadius: 6,
-  },
-  tabActive: {
-    backgroundColor: '#1a73e8',
-  },
-  tabText: {
-    fontSize: 14,
-    color: '#666',
-    fontWeight: 'bold',
-  },
-  tabTextActive: {
-    color: 'white',
+    justifyContent: 'center',
   },
   inputTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
     marginBottom: 15,
     textAlign: 'center',
   },
-  tipText: {
-    fontSize: 12,
-    color: '#999',
+  inputDesc: {
+    fontSize: 14,
+    color: '#666',
     textAlign: 'center',
-    marginTop: 10,
-    marginBottom: 10,
+    marginBottom: 8,
   },
-  inputRow: {
+  divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginVertical: 20,
   },
-  inputLabel: {
-    width: 90,
-    fontSize: 14,
-    color: '#333',
-  },
-  input: {
+  dividerLine: {
     flex: 1,
-    height: 44,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 5,
-    paddingHorizontal: 10,
-    fontSize: 16,
+    height: 1,
+    backgroundColor: '#ddd',
   },
-  btnOrange: {
-    backgroundColor: '#FF6B00',
-    paddingVertical: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 20,
+  dividerText: {
+    paddingHorizontal: 10,
+    color: '#999',
   },
   actionRow: {
     flexDirection: 'row',
@@ -722,10 +373,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-around',
   },
+  btnOrange: {
+    backgroundColor: '#FF6B00',
+    paddingVertical: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  btnBlue: {
+    backgroundColor: '#2196F3',
+    paddingVertical: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
   btnSmall: {
     backgroundColor: '#4CAF50',
     paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 15,
     borderRadius: 5,
   },
   btnGreen: {
