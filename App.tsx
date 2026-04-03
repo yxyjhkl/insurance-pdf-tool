@@ -143,16 +143,13 @@ interface DataRow {
 
 const COLUMNS = [
   '保单\n年度', '客户\n年龄',
-  '身故总利益', '主险现价', '现价增长率',
-  '当年分红\n现价', '累计分红\n现价',
-  '演示生存\n总利益', '演示增长率',
-  '预期生存\n总利益', '预期增长率', '预期单利'
+  '身故总利益', '主险现价', '现价增长率', '当年分红现价', '累计分红现价', '演示生存总利益', '演示增长率', '预期生存总利益', '预期增长率', '预期单利'
 ];
 
 const screenWidth = Dimensions.get('window').width;
 const COLS_COUNT = 12;
-const CELL_WIDTH = Math.floor((screenWidth - 20) / COLS_COUNT);
-const NARROW_CELL_WIDTH = Math.floor(CELL_WIDTH * 0.7);
+const CELL_WIDTH = Math.floor((screenWidth - 20) / COLS_COUNT) + 8;
+const NARROW_CELL_WIDTH = Math.floor(CELL_WIDTH * 0.65);
 
 const ALL_AGES_F: number[] = INSURANCE_DB.getAvailableAges('F');
 const ALL_AGES_M: number[] = INSURANCE_DB.getAvailableAges('M');
@@ -837,7 +834,7 @@ const styles = StyleSheet.create({
   },
   headerCell: {
     width: CELL_WIDTH,
-    height: 40,
+    height: 44,
     padding: 4,
     color: 'white',
     fontSize: 10,
@@ -847,6 +844,7 @@ const styles = StyleSheet.create({
   },
   dataRow: {
     flexDirection: 'row',
+    height: 26,
     backgroundColor: 'white',
   },
   dataRowAlt: {
@@ -854,10 +852,12 @@ const styles = StyleSheet.create({
   },
   dataCell: {
     width: CELL_WIDTH,
-    padding: 6,
+    height: 26,
+    padding: 4,
     fontSize: 10,
     textAlign: 'center',
     color: '#333',
+    textAlignVertical: 'center',
   },
   narrowCell: {
     width: NARROW_CELL_WIDTH,
