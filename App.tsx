@@ -338,7 +338,7 @@ export default function App() {
         <Text style={styles.title}>金尊海外建议书</Text>
         {showTable && (
           <Text style={styles.subtitle}>
-            {gender === 'M' ? '男性' : '女性'} {age}岁 | 期交{parseInt(premium).toLocaleString()}元 | 累计{parseInt(premium)*8.toLocaleString()}元 | 分红{dividendRate}x
+            {gender === 'M' ? '男性' : '女性'} {age}岁 | 期交{parseInt(premium).toLocaleString()}元 | 累计{(parseInt(premium)*8).toLocaleString()}元 | 分红{dividendRate}x
           </Text>
         )}
       </View>
