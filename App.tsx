@@ -142,7 +142,7 @@ interface DataRow {
 }
 
 const COLUMNS = [
-  '保单\n年度', '年龄', '期交\n保费', '累计\n保费',
+  '保单\n年度', '客户\n年龄',
   '身故\n总利益', '主险\n现价', '现价\n增长率',
   '当年\n分红现价', '累计\n分红现价',
   '演示生存\n总利益', '演示\n增长率',
@@ -167,6 +167,12 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [showTable, setShowTable] = useState(false);
   const [showAgePicker, setShowAgePicker] = useState(false);
+  const getMaxAge = () => gender === 'M' ? 62 : 65;
+
+  const getFilteredAges = () => {
+    const maxAge = getMaxAge();
+    return AVAILABLE_AGES.filter(a => a <= maxAge);
+  };
 
   const interpolateAgeData = (targetAge: number, gender: string, premium: number, dividendRate: number) => {
     const ages = AVAILABLE_AGES.sort((a, b) => a - b);
@@ -332,7 +338,7 @@ export default function App() {
         <Text style={styles.title}>金尊海外建议书</Text>
         {showTable && (
           <Text style={styles.subtitle}>
-            {gender === 'M' ? '男性' : '女性'} {age}岁 · {parseInt(premium).toLocaleString()}元 · 分红{dividendRate}x
+            {gender === 'M' ? '男性' : '女性'} {age}岁 | 期交{parseInt(premium).toLocaleString()}元 | 累计{parseInt(premium)*8.toLocaleString()}元 | 分红{dividendRate}x
           </Text>
         )}
       </View>
@@ -360,7 +366,7 @@ export default function App() {
             <Text style={styles.inputLabel}>投保年龄</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.ageScroll}>
               <View style={styles.ageRow}>
-                {AVAILABLE_AGES.map(a => (
+                {getFilteredAges().map(a => (
                   <TouchableOpacity
                     key={a}
                     style={[styles.ageBtn, age === a && styles.ageBtnActive]}
@@ -370,10 +376,13 @@ export default function App() {
                   </TouchableOpacity>
                 ))}
                 <TouchableOpacity
-                  style={[styles.ageBtn, !AVAILABLE_AGES.includes(age) && styles.ageBtnActive]}
-                  onPress={() => setShowAgePicker(true)}
+                  style={[styles.ageBtn, !getFilteredAges().includes(age) && styles.ageBtnActive]}
+                  onPress={() => {
+                    setTempAge(String(age));
+                    setShowAgePicker(true);
+                  }}
                 >
-                  <Text style={[styles.ageText, !AVAILABLE_AGES.includes(age) && styles.ageTextActive]}>自定义</Text>
+                  <Text style={[styles.ageText, !getFilteredAges().includes(age) && styles.ageTextActive]}>自定义</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -382,24 +391,52 @@ export default function App() {
           <Modal visible={showAgePicker} transparent animationType="slide">
             <View style={styles.modalOverlay}>
               <View style={styles.modalContent}>
-                <Text style={styles.modalTitle}>输入投保年龄 (0-65岁)</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  value={String(age)}
-                  onChangeText={(text) => {
-                    const num = parseInt(text);
-                    if (!isNaN(num) && num >= 0 && num <= 65) {
-                      setAge(num);
-                    }
-                  }}
-                  keyboardType="numeric"
-                  autoFocus
-                />
+                <Text style={styles.modalTitle}>输入投保年龄</Text>
+                <View style={styles.ageInputRow}>
+                  <TouchableOpacity style={styles.ageStepBtn} onPress={() => {
+                    const newVal = Math.max(0, age - 1);
+                    setAge(newVal);
+                    setTempAge(String(newVal));
+                  }}>
+                    <Text style={styles.ageStepText}>-</Text>
+                  </TouchableOpacity>
+                  <TextInput
+                    style={styles.ageInput}
+                    value={tempAge}
+                    onChangeText={setTempAge}
+                    keyboardType="numeric"
+                    maxLength={2}
+                  />
+                  <TouchableOpacity style={styles.ageStepBtn} onPress={() => {
+                    const maxAge = gender === 'M' ? 62 : 65;
+                    const newVal = Math.min(maxAge, age + 1);
+                    setAge(newVal);
+                    setTempAge(String(newVal));
+                  }}>
+                    <Text style={styles.ageStepText}>+</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.ageRangeText}>
+                  {gender === 'M' ? '男性可输入 0-62岁' : '女性可输入 0-65岁'}
+                </Text>
                 <View style={styles.modalButtons}>
-                  <TouchableOpacity style={styles.modalBtnCancel} onPress={() => setShowAgePicker(false)}>
+                  <TouchableOpacity style={styles.modalBtnCancel} onPress={() => {
+                    setTempAge(String(age));
+                    setShowAgePicker(false);
+                  }}>
                     <Text style={styles.modalBtnText}>取消</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.modalBtnConfirm} onPress={() => setShowAgePicker(false)}>
+                  <TouchableOpacity style={styles.modalBtnConfirm} onPress={() => {
+                    const num = parseInt(tempAge);
+                    const maxAge = gender === 'M' ? 62 : 65;
+                    if (!isNaN(num) && num >= 0 && num <= maxAge) {
+                      setAge(num);
+                    } else {
+                      Alert.alert('输入错误', gender === 'M' ? '男性年龄需在0-62岁之间' : '女性年龄需在0-65岁之间');
+                      return;
+                    }
+                    setShowAgePicker(false);
+                  }}>
                     <Text style={styles.modalBtnText}>确定</Text>
                   </TouchableOpacity>
                 </View>
@@ -435,7 +472,7 @@ export default function App() {
             <Text style={styles.btnText}>生成建议书</Text>
           </TouchableOpacity>
 
-          <Text style={styles.note}>注: 标准保费10万/年, 8年缴(共80万)</Text>
+          <Text style={styles.note}>注: 参考保费10万/年, 8年缴(共80万)</Text>
         </View>
       ) : (
         <>
@@ -468,10 +505,8 @@ export default function App() {
                   </View>
                   {data.map((row, index) => (
                     <View key={row.policy_year} style={[styles.dataRow, index % 2 === 1 && styles.dataRowAlt]}>
-                      <Text style={styles.dataCell}>{row.policy_year}</Text>
-                      <Text style={styles.dataCell}>{row.age}</Text>
-                      <Text style={styles.dataCell}>{formatNumber(row.premium)}</Text>
-                      <Text style={styles.dataCell}>{formatNumber(row.total_premium)}</Text>
+                      <Text style={[styles.dataCell, styles.narrowCell]}>{row.policy_year}</Text>
+                      <Text style={[styles.dataCell, styles.narrowCell]}>{row.age}</Text>
                       <Text style={styles.dataCell}>{formatNumber(row.death_benefit)}</Text>
                       <Text style={styles.dataCell}>{formatNumber(row.cash_value)}</Text>
                       <Text style={styles.dataCell}>{formatRate(row.growth_rate)}</Text>
@@ -492,17 +527,17 @@ export default function App() {
       )}
 
       <View style={styles.bottomRow}>
-        <TouchableOpacity style={styles.btnBlue} onPress={() => exportToExcel(data, gender, age, premium, dividendRate)}>
-          <Text style={styles.btnText}>导出Excel</Text>
+        <TouchableOpacity style={styles.bottomBtn} onPress={() => exportToExcel(data, gender, age, premium, dividendRate)}>
+          <Text style={styles.bottomBtnText}>导出表格</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.btnGreen} onPress={exportToCSV}>
-          <Text style={styles.btnText}>CSV</Text>
+        <TouchableOpacity style={styles.bottomBtn} onPress={exportToCSV}>
+          <Text style={styles.bottomBtnText}>导出文本</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.btnPurple} onPress={() => exportToImage(data, gender, age, premium, dividendRate)}>
-          <Text style={styles.btnText}>图片</Text>
+        <TouchableOpacity style={styles.bottomBtn} onPress={() => exportToImage(data, gender, age, premium, dividendRate)}>
+          <Text style={styles.bottomBtnText}>导出图片</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.btnRed} onPress={handleExit}>
-          <Text style={styles.btnText}>退出</Text>
+        <TouchableOpacity style={styles.bottomBtn} onPress={handleExit}>
+          <Text style={styles.bottomBtnText}>退出程序</Text>
         </TouchableOpacity>
       </View>
 
@@ -672,6 +707,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-around',
   },
+  bottomBtn: {
+    backgroundColor: '#1a73e8',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    flex: 1,
+    marginHorizontal: 4,
+    minHeight: 50,
+    justifyContent: 'center',
+  },
+  bottomBtnText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
   btnSmall: {
     backgroundColor: '#4CAF50',
     paddingVertical: 8,
@@ -757,6 +808,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#333',
   },
+  narrowCell: {
+    width: Math.floor(CELL_WIDTH * 0.7),
+  },
   highlight: {
     color: '#1a73e8',
     fontWeight: 'bold',
@@ -821,5 +875,40 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  ageInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 15,
+    gap: 15,
+  },
+  ageStepBtn: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#1a73e8',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ageStepText: {
+    color: 'white',
+    fontSize: 28,
+    fontWeight: 'bold',
+  },
+  ageInput: {
+    width: 80,
+    height: 60,
+    borderWidth: 2,
+    borderColor: '#1a73e8',
+    borderRadius: 10,
+    fontSize: 32,
+    textAlign: 'center',
+    fontWeight: 'bold',
+  },
+  ageRangeText: {
+    color: '#666',
+    fontSize: 12,
+    marginBottom: 15,
   },
 });
