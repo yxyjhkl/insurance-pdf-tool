@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Share, BackHandler, TextInput, Dimensions } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
@@ -46,7 +46,7 @@ function extractCashValuesFromOCR(ocrText) {
   const lines = ocrText.split("\n");
   const cashValues = [];
   for (const line of lines) {
-    const cleaned = line.replace(/[^\d,锛?]/g, "");
+    const cleaned = line.replace(/[^\d,，.]/g, "");
     const nums = cleaned.match(/\d+/g);
     if (nums && nums.length >= 2) {
       for (const num of nums) {
@@ -234,7 +234,7 @@ export default function App() {
       }, 500);
     } else {
       if (!cash1 || !cash5 || !cash10 || !cash20 || !cash30) {
-        Alert.alert('鎻愮ず', '璇疯緭鍏?涓勾浠界殑鐜伴噾浠峰€?);
+        Alert.alert('提示', '请输入5个年份的现金价值');
         return;
       }
       
@@ -249,7 +249,7 @@ export default function App() {
         ];
         
         if (cashValues.some(v => v <= 0)) {
-          Alert.alert('鎻愮ず', '璇疯緭鍏ユ湁鏁堢殑鐜伴噾浠峰€兼暟瀛?);
+          Alert.alert('提示', '请输入有效的现金价值数字');
           setLoading(false);
           return;
         }
@@ -263,13 +263,13 @@ export default function App() {
   };
 
   const handlePickPdf = async () => {
-    Alert.alert('閫夋嫨鏂瑰紡', '璇烽€夋嫨濡備綍鑾峰彇PDF鏁版嵁', [
+    Alert.alert('选择方式', '请选择如何获取PDF数据', [
       { 
-        text: '鎷嶇収璇嗗埆', 
+        text: '拍照识别', 
         onPress: async () => {
           const permission = await ImagePicker.requestCameraPermissionsAsync();
           if (!permission.granted) {
-            Alert.alert('闇€瑕佹潈闄?, '璇峰厑璁哥浉鏈烘潈闄?);
+            Alert.alert('需要权限', '请允许相机权限');
             return;
           }
           
@@ -280,7 +280,7 @@ export default function App() {
           
           if (!result.canceled && result.assets[0]) {
             setLoading(true);
-            Alert.alert('鎻愮ず', '姝ｅ湪璇嗗埆锛岃绋嶅€?..');
+            Alert.alert('提示', '正在识别，请稍候...');
             
             const ocrResult = await recognizeImageWithBaidu(result.assets[0].uri);
             setLoading(false);
@@ -296,18 +296,18 @@ export default function App() {
                 setCash20(values[3].toString());
                 setCash30(values[4].toString());
                 setInputMode('cash');
-                Alert.alert('璇嗗埆鎴愬姛', '宸茶嚜鍔ㄥ～鍏呯幇閲戜环鍊兼暟鎹細\n绗?骞? ' + values[0] + '\n绗?骞? ' + values[1] + '\n绗?0骞? ' + values[2] + '\n绗?0骞? ' + values[3] + '\n绗?0骞? ' + values[4]);
+                Alert.alert('识别成功', '已自动填充现金价值数据：\n第1年: ' + values[0] + '\n第5年: ' + values[1] + '\n第10年: ' + values[2] + '\n第20年: ' + values[3] + '\n第30年: ' + values[4]);
               } else {
-                Alert.alert('璇嗗埆澶辫触', '鏈兘浠庡浘鐗囦腑鎻愬彇鍒版湁鏁堟暟鎹紝璇锋墜鍔ㄨ緭鍏?);
+                Alert.alert('识别失败', '未能从图片中提取到有效数据，请手动输入');
               }
             } else {
-              Alert.alert('璇嗗埆澶辫触', '璇烽噸璇曟垨鎵嬪姩杈撳叆');
+              Alert.alert('识别失败', '请重试或手动输入');
             }
           }
         }
       },
       { 
-        text: '鐩稿唽閫夋嫨', 
+        text: '相册选择', 
         onPress: async () => {
           const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -316,7 +316,7 @@ export default function App() {
           
           if (!result.canceled && result.assets[0]) {
             setLoading(true);
-            Alert.alert('鎻愮ず', '姝ｅ湪璇嗗埆锛岃绋嶅€?..');
+            Alert.alert('提示', '正在识别，请稍候...');
             
             const ocrResult = await recognizeImageWithBaidu(result.assets[0].uri);
             setLoading(false);
@@ -332,17 +332,17 @@ export default function App() {
                 setCash20(values[3].toString());
                 setCash30(values[4].toString());
                 setInputMode('cash');
-                Alert.alert('璇嗗埆鎴愬姛', '宸茶嚜鍔ㄥ～鍏呯幇閲戜环鍊兼暟鎹細\n绗?骞? ' + values[0] + '\n绗?骞? ' + values[1] + '\n绗?0骞? ' + values[2] + '\n绗?0骞? ' + values[3] + '\n绗?0骞? ' + values[4]);
+                Alert.alert('识别成功', '已自动填充现金价值数据：\n第1年: ' + values[0] + '\n第5年: ' + values[1] + '\n第10年: ' + values[2] + '\n第20年: ' + values[3] + '\n第30年: ' + values[4]);
               } else {
-                Alert.alert('璇嗗埆澶辫触', '鏈兘浠庡浘鐗囦腑鎻愬彇鍒版湁鏁堟暟鎹紝璇锋墜鍔ㄨ緭鍏?);
+                Alert.alert('识别失败', '未能从图片中提取到有效数据，请手动输入');
               }
             } else {
-              Alert.alert('璇嗗埆澶辫触', '璇烽噸璇曟垨鎵嬪姩杈撳叆');
+              Alert.alert('识别失败', '请重试或手动输入');
             }
           }
         }
       },
-      { text: '鍙栨秷', style: 'cancel' }
+      { text: '取消', style: 'cancel' }
     ]);
   };
 
@@ -372,93 +372,102 @@ export default function App() {
 
   const exportToCSV = () => {
     if (data.length === 0) {
-      Alert.alert('鎻愮ず', '璇峰厛鐢熸垚鏁版嵁');
+      Alert.alert('提示', '请先生成数据');
       return;
     }
     
-    let csvContent = '淇濆崟骞村害,骞撮緞,鏈熶氦淇濊垂,绱淇濊垂,韬晠鎬诲埄鐩?涓婚櫓鐜颁环,鐜颁环澧為暱鐜?褰撳勾鍒嗙孩鐜颁环,绱鍒嗙孩鐜颁环,婕旂ず鐢熷瓨鎬诲埄鐩?婕旂ず澧為暱鐜?棰勬湡鐢熷瓨鎬诲埄鐩?棰勬湡澧為暱鐜?棰勬湡鍗曞埄\n';
+    let csvContent = '保单年度,年龄,期交保费,累计保费,身故总利益,主险现价,现价增长率,当年分红现价,累计分红现价,演示生存总利益,演示增长率,预期生存总利益,预期增长率,预期单利\n';
     
     data.forEach(row => {
       csvContent += `${row.policy_year},${row.age},${row.premium},${row.total_premium},${row.death_benefit},${row.cash_value},${formatRate(row.growth_rate)},${row.current_dividend_cash},${row.accum_dividend_cash},${row.demo_survival},${formatRate(row.demo_rate)},${row.expected_survival},${formatRate(row.expected_rate)},${formatSimpleRate(row.expected_simple_rate)}\n`;
     });
 
-    const fileName = `閲戝皧鍒嗙孩寤鸿涔${new Date().getTime()}.csv`;
+    const fileName = `金尊分红建议书_${new Date().getTime()}.csv`;
     const filePath = FileSystem.documentDirectory + fileName;
     
     FileSystem.writeAsStringAsync(filePath, csvContent, {
       encoding: FileSystem.EncodingType.UTF8,
     }).then(() => {
-      Alert.alert('瀵煎嚭鎴愬姛', `鏂囦欢宸蹭繚瀛樺埌: ${fileName}`, [
-        { text: '鍒嗕韩', onPress: () => Share.share({ message: filePath, url: filePath }) },
-        { text: '纭畾' }
+      Alert.alert('导出成功', `文件已保存到: ${fileName}`, [
+        { text: '分享', onPress: () => Share.share({ message: filePath, url: filePath }) },
+        { text: '确定' }
       ]);
     }).catch(() => {
-      Alert.alert('瀵煎嚭澶辫触', '鏃犳硶淇濆瓨鏂囦欢');
+      Alert.alert('导出失败', '无法保存文件');
     });
   };
 
   const handleViewPdf = async () => {
     Alert.alert(
-      'PDF婕旂ず',
-      '閫夋嫨婕旂ず鏂囨。',
+      'PDF演示',
+      '选择演示文档',
       [
         { 
-          text: '浜у搧璁″垝涔?, 
+          text: '产品计划书', 
           onPress: () => {
-            Alert.alert('鎻愮ず', 'PDF婕旂ず鍔熻兘寮€鍙戜腑...
+            Alert.alert('提示', 'PDF演示功能开发中...
 
-鍙互鏄剧ず浜у搧璁″垝涔DF鏂囦欢');
+可以显示产品计划书PDF文件');
           }
         },
-        { text: '鍙栨秷', style: 'cancel' }
+        { text: '取消', style: 'cancel' }
       ]
     );
   };
 
   const handleTutorial = () => {
     Alert.alert(
-      '浣跨敤鏁欑▼',
-      '鏈珹PP鐢ㄤ簬淇濋櫓鍒╃泭婕旂ず
+      '使用教程',
+      '本APP用于保险利益演示
 
 ' +
-      '銆愬揩閫熷紑濮嬨€?' +
-      '1. 鐐瑰嚮"鍙傛暟杈撳叆"鎴?绮剧‘杈撳叆"
+      '【快速开始】
 ' +
-      '2. 杈撳叆鎶曚繚淇℃伅鎴栫幇閲戜环鍊?' +
-      '3. 鐐瑰嚮"鐢熸垚娴嬬畻琛?
+      '1. 点击"参数输入"或"精确输入"
 ' +
-      '4. 璋冩暣鍒嗙孩瀹炵幇鐜囨煡鐪嬩笉鍚?scenarios
+      '2. 输入投保信息或现金价值
+' +
+      '3. 点击"生成测算表"
+' +
+      '4. 调整分红实现率查看不同 scenarios
 
 ' +
-      '銆愭媿鐓ц瘑鍒€?绮剧‘杈撳叆妯″紡)
+      '【拍照识别】(精确输入模式)
 ' +
-      '1. 鍦ㄧ簿纭緭鍏ラ〉闈㈢偣鍑?馃摲 鎷嶇収璇嗗埆"
+      '1. 在精确输入页面点击"📷 拍照识别"
 ' +
-      '2. 閫夋嫨鎷嶇収鎴栦粠鐩稿唽閫夋嫨
+      '2. 选择拍照或从相册选择
 ' +
-      '3. 瀵瑰噯PDF寤鸿涔︾殑"涓婚櫓鐜颁环"琛ㄦ牸鎷嶇収
+      '3. 对准PDF建议书的"主险现价"表格拍照
 ' +
-      '4. 绯荤粺鑷姩璇嗗埆骞跺～鍏呮暟鎹?
+      '4. 系统自动识别并填充数据
+
 ' +
-      '銆愭暟鎹潵婧愩€?' +
-      '浠嶱DF寤鸿涔?涓婚櫓鐜颁环"鍒楋紝鎶勫綍浠ヤ笅5涓勾浠界殑鏁板€硷細
+      '【数据来源】
 ' +
-      '绗?骞淬€佺5骞淬€佺10骞淬€佺20骞淬€佺30骞?
+      '从PDF建议书"主险现价"列，抄录以下5个年份的数值：
 ' +
-      '銆愬鍑篊SV銆?' +
-      '璁＄畻瀹屾垚鍚庡彲瀵煎嚭CSV鏂囦欢鍒嗕韩缁欏鎴?
+      '第1年、第5年、第10年、第20年、第30年
+
 ' +
-      '銆愮櫨搴CR銆?' +
-      '鍏嶈垂棰濆害锛?000娆?澶?' +
-      '濡傞渶鏇村璇嗗埆娆℃暟闇€浠樿垂',
-      [{ text: '鐭ラ亾浜? }]
+      '【导出CSV】
+' +
+      '计算完成后可导出CSV文件分享给客户
+
+' +
+      '【百度OCR】
+' +
+      '免费额度：1000次/天
+' +
+      '如需更多识别次数需付费',
+      [{ text: '知道了' }]
     );
   };
 
   const handleExit = () => {
-    Alert.alert('閫€鍑虹‘璁?, '纭畾瑕侀€€鍑哄簲鐢ㄥ悧锛?, [
-      { text: '鍙栨秷', style: 'cancel' },
-      { text: '閫€鍑?, style: 'destructive', onPress: () => BackHandler.exitApp() }
+    Alert.alert('退出确认', '确定要退出应用吗？', [
+      { text: '取消', style: 'cancel' },
+      { text: '退出', style: 'destructive', onPress: () => BackHandler.exitApp() }
     ]);
   };
 
@@ -479,9 +488,9 @@ export default function App() {
     <View style={styles.container}>
       <StatusBar style="light" />
       <View style={styles.header}>
-        <Text style={styles.title}>閲戝皧鍒嗙孩鍙稿簡鐗堢畝鐗堝缓璁功</Text>
+        <Text style={styles.title}>金尊分红司庆版简版建议书</Text>
         {data.length > 0 && (
-          <Text style={styles.subtitle}>鍒嗙孩瀹炵幇鐜?{dividendRate}x</Text>
+          <Text style={styles.subtitle}>分红实现率 {dividendRate}x</Text>
         )}
       </View>
 
@@ -492,51 +501,51 @@ export default function App() {
               style={[styles.tab, inputMode === 'params' && styles.tabActive]} 
               onPress={() => setInputMode('params')}
             >
-              <Text style={[styles.tabText, inputMode === 'params' && styles.tabTextActive]}>鍙傛暟杈撳叆</Text>
+              <Text style={[styles.tabText, inputMode === 'params' && styles.tabTextActive]}>参数输入</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.tab, inputMode === 'cash' && styles.tabActive]} 
               onPress={() => setInputMode('cash')}
             >
-              <Text style={[styles.tabText, inputMode === 'cash' && styles.tabTextActive]}>绮剧‘杈撳叆</Text>
+              <Text style={[styles.tabText, inputMode === 'cash' && styles.tabTextActive]}>精确输入</Text>
             </TouchableOpacity>
           </View>
           
           {inputMode === 'params' ? (
             <>
-              <Text style={styles.inputTitle}>璇疯緭鍏ユ姇淇濅俊鎭?/Text>
-              <InputField label="琚繚闄╀汉骞撮緞" value={age} onChange={setAge} placeholder="40" keyboardType="numeric" />
-              <InputField label="骞寸即淇濊垂(鍏?" value={premium} onChange={setPremium} placeholder="100000" keyboardType="numeric" />
-              <InputField label="缂磋垂骞撮檺(骞?" value={paymentYears} onChange={setPaymentYears} placeholder="8" keyboardType="numeric" />
-              <InputField label="鍒嗙孩瀹炵幇鐜? value={dividendRate} onChange={setDividendRate} placeholder="1.6" keyboardType="numeric" />
-              <Text style={styles.tipText}>* 浣跨敤浼扮畻鍏紡璁＄畻锛屾暟鎹彲鑳芥湁璇樊</Text>
+              <Text style={styles.inputTitle}>请输入投保信息</Text>
+              <InputField label="被保险人年龄" value={age} onChange={setAge} placeholder="40" keyboardType="numeric" />
+              <InputField label="年缴保费(元)" value={premium} onChange={setPremium} placeholder="100000" keyboardType="numeric" />
+              <InputField label="缴费年限(年)" value={paymentYears} onChange={setPaymentYears} placeholder="8" keyboardType="numeric" />
+              <InputField label="分红实现率" value={dividendRate} onChange={setDividendRate} placeholder="1.6" keyboardType="numeric" />
+              <Text style={styles.tipText}>* 使用估算公式计算，数据可能有误差</Text>
             </>
           ) : (
             <>
-              <Text style={styles.inputTitle}>璇蜂粠PDF琛ㄦ牸鎶勫綍鐜伴噾浠峰€?/Text>
-              <Text style={styles.tipText}>浠嶱DF寤鸿涔︾殑"涓婚櫓鐜颁环"鍒楋紝鎶勫綍浠ヤ笅5涓勾浠界殑鏁板€硷細</Text>
+              <Text style={styles.inputTitle}>请从PDF表格抄录现金价值</Text>
+              <Text style={styles.tipText}>从PDF建议书的"主险现价"列，抄录以下5个年份的数值：</Text>
               <TouchableOpacity style={styles.btnBlue} onPress={handlePickPdf}>
-                <Text style={styles.btnText}>馃摲 鎷嶇収璇嗗埆</Text>
+                <Text style={styles.btnText}>📷 拍照识别</Text>
               </TouchableOpacity>
-              <InputField label="绗?骞? value={cash1} onChange={setCash1} placeholder="渚嬶細15000" keyboardType="numeric" />
-              <InputField label="绗?骞? value={cash5} onChange={setCash5} placeholder="渚嬶細170000" keyboardType="numeric" />
-              <InputField label="绗?0骞? value={cash10} onChange={setCash10} placeholder="渚嬶細770000" keyboardType="numeric" />
-              <InputField label="绗?0骞? value={cash20} onChange={setCash20} placeholder="渚嬶細2000000" keyboardType="numeric" />
-              <InputField label="绗?0骞? value={cash30} onChange={setCash30} placeholder="渚嬶細4000000" keyboardType="numeric" />
-              <InputField label="鍒嗙孩瀹炵幇鐜? value={dividendRate} onChange={setDividendRate} placeholder="1.6" keyboardType="numeric" />
-              <Text style={styles.tipText}>* 杈撳叆鐪熷疄鏁版嵁锛岃绠楁洿鍑嗙‘</Text>
+              <InputField label="第1年" value={cash1} onChange={setCash1} placeholder="例：15000" keyboardType="numeric" />
+              <InputField label="第5年" value={cash5} onChange={setCash5} placeholder="例：170000" keyboardType="numeric" />
+              <InputField label="第10年" value={cash10} onChange={setCash10} placeholder="例：770000" keyboardType="numeric" />
+              <InputField label="第20年" value={cash20} onChange={setCash20} placeholder="例：2000000" keyboardType="numeric" />
+              <InputField label="第30年" value={cash30} onChange={setCash30} placeholder="例：4000000" keyboardType="numeric" />
+              <InputField label="分红实现率" value={dividendRate} onChange={setDividendRate} placeholder="1.6" keyboardType="numeric" />
+              <Text style={styles.tipText}>* 输入真实数据，计算更准确</Text>
             </>
           )}
           
           <TouchableOpacity style={styles.btnOrange} onPress={handleCalculate}>
-            <Text style={styles.btnText}>鐢熸垚娴嬬畻琛?/Text>
+            <Text style={styles.btnText}>生成测算表</Text>
           </TouchableOpacity>
         </ScrollView>
       ) : (
         <>
           <View style={styles.actionRow}>
             <TouchableOpacity style={styles.btnSmall} onPress={handleReset}>
-              <Text style={styles.btnTextSmall}>閲嶇疆</Text>
+              <Text style={styles.btnTextSmall}>重置</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.btnSmall} onPress={() => adjustDividend(0.1)}>
               <Text style={styles.btnTextSmall}>+0.1x</Text>
@@ -550,7 +559,7 @@ export default function App() {
           {loading ? (
             <View style={styles.loading}>
               <ActivityIndicator size="large" color="#1a73e8" />
-              <Text style={styles.loadingText}>姝ｅ湪璁＄畻...</Text>
+              <Text style={styles.loadingText}>正在计算...</Text>
             </View>
           ) : data.length > 0 ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -588,21 +597,21 @@ export default function App() {
 
       <View style={styles.bottomRow}>
         <TouchableOpacity style={styles.btnBlue} onPress={handleViewPdf}>
-          <Text style={styles.btnText}>PDF婕旂ず</Text>
+          <Text style={styles.btnText}>PDF演示</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.btnBlue} onPress={handleTutorial}>
-          <Text style={styles.btnText}>浣跨敤鏁欑▼</Text>
+          <Text style={styles.btnText}>使用教程</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.btnGreen} onPress={exportToCSV}>
-          <Text style={styles.btnText}>瀵煎嚭CSV</Text>
+          <Text style={styles.btnText}>导出CSV</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.btnRed} onPress={handleExit}>
-          <Text style={styles.btnText}>閫€鍑?/Text>
+          <Text style={styles.btnText}>退出</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>閲戝皧鍒嗙孩鍙稿簡鐗?v4.0</Text>
+        <Text style={styles.footerText}>金尊分红司庆版 v4.0</Text>
       </View>
     </View>
   );
