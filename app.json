@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "金尊海外",
+    "slug": "jinzun-overseas",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#D4AF37"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.jinzun.overseas"
+    },
+    "android": {
+      "package": "com.jinzun.overseas",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#D4AF37"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-document-picker"
+    ]
+  }
+}
