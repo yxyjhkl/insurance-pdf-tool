@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Share, BackHandler, TextInput, Dimensions } from 'react-native';
-import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { StatusBar } from 'expo-status-bar';
+
+const INSURANCE_DB = require('./insurance_db.js');
 
 interface DataRow {
   policy_year: number;
@@ -32,18 +33,20 @@ const COLUMNS = [
 const screenWidth = Dimensions.get('window').width;
 const CELL_WIDTH = Math.floor((screenWidth - 20) / 4) + 5;
 
-const PAYMENT_YEARS = 8;
-const BASE_PREMIUM = 100000;
-const BASE_AGE = 40;
-const GUARANTEED_RATE = 1.05;
-const DIVIDEND_RATE = 0.03;
-const CASH_VALUE_GROWTH = 0.0175;
+const AVAILABLE_AGES = INSURANCE_DB.getAvailableAges('F');
+const GENDERS = [
+  { label: '男性', value: 'M' },
+  { label: '女性', value: 'F' },
+];
 
 export default function App() {
-  const [dividendRate, setDividendRate] = useState<string>('1.6');
+  const [gender, setGender] = useState('F');
+  const [age, setAge] = useState(30);
+  const [premium, setPremium] = useState('100000');
+  const [dividendRate, setDividendRate] = useState('1.0');
   const [data, setData] = useState<DataRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [pdfLoaded, setPdfLoaded] = useState(false);
+  const [showTable, setShowTable] = useState(false);
 
   const formatNumber = (num: number | null | undefined): string => {
     if (num === null || num === undefined) return '--';
@@ -60,127 +63,63 @@ export default function App() {
     return (rate * 100).toFixed(2) + '%';
   };
 
-  const generateData = (rate: number) => {
-    const newData: DataRow[] = [];
-    let prevCashValue = 0;
-    let prevExpectedSurvival = 0;
-    
-    for (let year = 1; year <= 30; year++) {
-      const isPaid = year <= PAYMENT_YEARS;
-      const totalPremium = isPaid ? BASE_PREMIUM * year : BASE_PREMIUM * PAYMENT_YEARS;
-      
-      const guaranteed = totalPremium * GUARANTEED_RATE;
-      const currentDivRaw = BASE_PREMIUM * DIVIDEND_RATE * (isPaid ? 1 : 0);
-      const accumDivRaw = currentDivRaw * year;
-      
-      const currentDivDemo = currentDivRaw * rate;
-      const accumDivDemo = accumDivRaw * rate;
-      
-      const cashValue = guaranteed;
-      const currentDividendCash = currentDivDemo;
-      const accumDividendCash = accumDivDemo;
-      
-      const demoSurvival = cashValue + accumDivDemo;
-      const expectedSurvival = cashValue + accumDividendCash;
-      
-      let growthRate = null;
-      if (prevCashValue > 0) {
-        growthRate = (cashValue / prevCashValue) - 1;
-      }
-      
-      let demoRate = null;
-      if (year >= 11) {
-        demoRate = 0.038;
-      }
-      
-      let expectedRate = null;
-      if (prevExpectedSurvival > 0) {
-        expectedRate = (expectedSurvival / prevExpectedSurvival) - 1;
-      }
-      
-      let expectedSimpleRate = null;
-      if (year > PAYMENT_YEARS && totalPremium > 0 && expectedSurvival > totalPremium) {
-        const yearsFactor = (year + PAYMENT_YEARS) / 2;
-        expectedSimpleRate = (expectedSurvival - totalPremium) / totalPremium / yearsFactor;
-      }
-      
-      prevCashValue = cashValue;
-      prevExpectedSurvival = expectedSurvival;
-      
-      newData.push({
-        policy_year: year,
-        age: BASE_AGE + year,
-        premium: isPaid ? BASE_PREMIUM : 0,
-        total_premium: totalPremium,
-        death_benefit: Math.round(guaranteed * 1.05 + accumDivDemo),
-        cash_value: Math.round(cashValue),
-        growth_rate: growthRate,
-        current_dividend_cash: Math.round(currentDividendCash),
-        accum_dividend_cash: Math.round(accumDividendCash),
-        demo_survival: Math.round(demoSurvival),
-        demo_rate: demoRate,
-        expected_survival: Math.round(expectedSurvival),
-        expected_rate: expectedRate,
-        expected_simple_rate: expectedSimpleRate,
-      });
+  const handleCalculate = () => {
+    const premiumNum = parseFloat(premium);
+    if (isNaN(premiumNum) || premiumNum < 25000) {
+      Alert.alert('输入错误', '保费最低2.5万元起');
+      return;
     }
-    
-    return newData;
-  };
 
-  const handlePickPdf = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: 'application/pdf',
-        copyToCacheDirectory: true,
-      });
-      
-      if (result.assets && result.assets[0]) {
-        setLoading(true);
-        setPdfLoaded(true);
-        
-        setTimeout(() => {
-          const rate = parseFloat(dividendRate) || 1.6;
-          setData(generateData(rate));
-          setLoading(false);
-        }, 500);
+    const rate = parseFloat(dividendRate) || 1.0;
+    const genderCode = gender;
+
+    setLoading(true);
+    setTimeout(() => {
+      const result = INSURANCE_DB.getInsuranceData(age, genderCode, premiumNum, rate);
+      if (result && result.length > 0) {
+        setData(result);
+        setShowTable(true);
+      } else {
+        Alert.alert('数据不存在', '该年龄/性别组合暂无数据');
       }
-    } catch (error) {
-      Alert.alert('错误', 'PDF选择失败');
       setLoading(false);
-    }
+    }, 300);
   };
 
   const adjustDividend = (delta: number) => {
-    const newRate = Math.max(0.1, parseFloat(dividendRate) + delta);
+    const newRate = Math.max(0, parseFloat(dividendRate) + delta);
     setDividendRate(newRate.toFixed(1));
-    setData(generateData(newRate));
+    const premiumNum = parseFloat(premium);
+    if (!isNaN(premiumNum) && premiumNum >= 25000) {
+      const result = INSURANCE_DB.getInsuranceData(age, gender, premiumNum, newRate);
+      if (result) setData(result);
+    }
   };
 
   const handleReset = () => {
-    setPdfLoaded(false);
+    setShowTable(false);
     setData([]);
   };
 
   const exportToCSV = () => {
     if (data.length === 0) {
-      Alert.alert('提示', '请先导入数据');
+      Alert.alert('提示', '请先计算数据');
       return;
     }
-    
+
     let csvContent = '保单年度,年龄,期交保费,累计保费,身故总利益,主险现价,现价增长率,当年分红现价,累计分红现价,演示生存总利益,演示增长率,预期生存总利益,预期增长率,预期单利\n';
-    
+
     data.forEach(row => {
       csvContent += `${row.policy_year},${row.age},${row.premium},${row.total_premium},${row.death_benefit},${row.cash_value},${formatRate(row.growth_rate)},${row.current_dividend_cash},${row.accum_dividend_cash},${row.demo_survival},${formatRate(row.demo_rate)},${row.expected_survival},${formatRate(row.expected_rate)},${formatSimpleRate(row.expected_simple_rate)}\n`;
     });
 
     const fileName = `金尊分红建议书_${new Date().getTime()}.csv`;
     const filePath = FileSystem.documentDirectory + fileName;
-    
+
     FileSystem.writeAsStringAsync(filePath, csvContent, {
       encoding: FileSystem.EncodingType.UTF8,
     }).then(() => {
-      Alert.alert('导出成功', `文件已保存到: ${fileName}`, [
+      Alert.alert('导出成功', `文件已保存: ${fileName}`, [
         { text: '分享', onPress: () => Share.share({ message: filePath, url: filePath }) },
         { text: '确定' }
       ]);
@@ -196,49 +135,105 @@ export default function App() {
     ]);
   };
 
+  const getYearText = (year: number) => {
+    const yearMap: { [key: number]: string } = {
+      0: '0岁',
+      5: '5岁',
+      10: '10岁',
+      20: '20岁',
+      30: '30岁',
+      40: '40岁',
+      50: '50岁',
+      60: '60岁',
+      62: '62岁',
+      65: '65岁',
+    };
+    return yearMap[year] || `${year}岁`;
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
       <View style={styles.header}>
-        <Text style={styles.title}>金尊分红司庆版简版建议书</Text>
-        {pdfLoaded && (
-          <Text style={styles.subtitle}>分红实现率 {dividendRate}x · {PAYMENT_YEARS}年缴</Text>
+        <Text style={styles.title}>金尊分红司庆版建议书</Text>
+        {showTable && (
+          <Text style={styles.subtitle}>
+            {gender === 'M' ? '男性' : '女性'} {age}岁 · {parseInt(premium).toLocaleString()}元 · 分红{dividendRate}x
+          </Text>
         )}
       </View>
 
-      {!pdfLoaded ? (
+      {!showTable ? (
         <View style={styles.inputPanel}>
-          <Text style={styles.inputTitle}>功能说明</Text>
-          <Text style={styles.inputDesc}>点击下方按钮导入PDF建议书</Text>
-          <Text style={styles.inputDesc}>或使用示例数据测试</Text>
-          
-          <TouchableOpacity style={styles.btnOrange} onPress={handlePickPdf}>
-            <Text style={styles.btnText}>导入PDF建议书</Text>
-          </TouchableOpacity>
-          
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>或</Text>
-            <View style={styles.dividerLine} />
+          <Text style={styles.inputTitle}>输入投保信息</Text>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>性别</Text>
+            <View style={styles.genderRow}>
+              {GENDERS.map(g => (
+                <TouchableOpacity
+                  key={g.value}
+                  style={[styles.genderBtn, gender === g.value && styles.genderBtnActive]}
+                  onPress={() => setGender(g.value)}
+                >
+                  <Text style={[styles.genderText, gender === g.value && styles.genderTextActive]}>{g.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
-          
-          <TouchableOpacity style={styles.btnBlue} onPress={() => {
-            setPdfLoaded(true);
-            setLoading(true);
-            const rate = parseFloat(dividendRate) || 1.6;
-            setTimeout(() => {
-              setData(generateData(rate));
-              setLoading(false);
-            }, 300);
-          }}>
-            <Text style={styles.btnText}>使用示例数据</Text>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>投保年龄</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.ageScroll}>
+              <View style={styles.ageRow}>
+                {AVAILABLE_AGES.map(a => (
+                  <TouchableOpacity
+                    key={a}
+                    style={[styles.ageBtn, age === a && styles.ageBtnActive]}
+                    onPress={() => setAge(a)}
+                  >
+                    <Text style={[styles.ageText, age === a && styles.ageTextActive]}>{getYearText(a)}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>年交保费 (元)</Text>
+            <TextInput
+              style={styles.input}
+              value={premium}
+              onChangeText={setPremium}
+              keyboardType="numeric"
+              placeholder="最低2.5万元"
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>分红实现率</Text>
+            <View style={styles.rateRow}>
+              <TouchableOpacity style={styles.rateBtn} onPress={() => adjustDividend(-0.1)}>
+                <Text style={styles.rateBtnText}>-0.1</Text>
+              </TouchableOpacity>
+              <Text style={styles.rateValue}>{dividendRate}x</Text>
+              <TouchableOpacity style={styles.rateBtn} onPress={() => adjustDividend(0.1)}>
+                <Text style={styles.rateBtnText}>+0.1</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <TouchableOpacity style={styles.btnOrange} onPress={handleCalculate}>
+            <Text style={styles.btnText}>生成建议书</Text>
           </TouchableOpacity>
+
+          <Text style={styles.note}>注: 标准保费10万/年, 8年缴(共80万)</Text>
         </View>
       ) : (
         <>
           <View style={styles.actionRow}>
             <TouchableOpacity style={styles.btnSmall} onPress={handleReset}>
-              <Text style={styles.btnTextSmall}>重置</Text>
+              <Text style={styles.btnTextSmall}>重算</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.btnSmall} onPress={() => adjustDividend(0.1)}>
               <Text style={styles.btnTextSmall}>+0.1</Text>
@@ -298,7 +293,7 @@ export default function App() {
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>金尊分红司庆版 v3.0</Text>
+        <Text style={styles.footerText}>金尊分红司庆版 v3.1 (数据库版)</Text>
       </View>
     </View>
   );
@@ -330,34 +325,124 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     backgroundColor: 'white',
-    justifyContent: 'center',
   },
   inputTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 15,
+    marginBottom: 20,
     textAlign: 'center',
   },
-  inputDesc: {
+  inputGroup: {
+    marginBottom: 15,
+  },
+  inputLabel: {
     fontSize: 14,
     color: '#666',
-    textAlign: 'center',
     marginBottom: 8,
   },
-  divider: {
+  input: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: '#f9f9f9',
+  },
+  genderRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  genderBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#f0f0f0',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  genderBtnActive: {
+    backgroundColor: '#e8f0fe',
+    borderColor: '#1a73e8',
+  },
+  genderText: {
+    fontSize: 15,
+    color: '#666',
+  },
+  genderTextActive: {
+    color: '#1a73e8',
+    fontWeight: 'bold',
+  },
+  ageScroll: {
+    flexGrow: 0,
+  },
+  ageRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  ageBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 6,
+    backgroundColor: '#f0f0f0',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  ageBtnActive: {
+    backgroundColor: '#e8f0fe',
+    borderColor: '#1a73e8',
+  },
+  ageText: {
+    fontSize: 13,
+    color: '#666',
+  },
+  ageTextActive: {
+    color: '#1a73e8',
+    fontWeight: 'bold',
+  },
+  rateRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 20,
+    justifyContent: 'center',
+    gap: 20,
   },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#ddd',
+  rateBtn: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 6,
   },
-  dividerText: {
-    paddingHorizontal: 10,
+  rateBtnText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  rateValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#9c27b0',
+    minWidth: 60,
+    textAlign: 'center',
+  },
+  btnOrange: {
+    backgroundColor: '#FF6B00',
+    paddingVertical: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  btnText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  note: {
+    textAlign: 'center',
     color: '#999',
+    fontSize: 12,
+    marginTop: 15,
   },
   actionRow: {
     flexDirection: 'row',
@@ -373,24 +458,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-around',
   },
-  btnOrange: {
-    backgroundColor: '#FF6B00',
-    paddingVertical: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  btnBlue: {
-    backgroundColor: '#2196F3',
-    paddingVertical: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
   btnSmall: {
     backgroundColor: '#4CAF50',
     paddingVertical: 8,
     paddingHorizontal: 15,
     borderRadius: 5,
+  },
+  btnTextSmall: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: 'bold',
   },
   btnGreen: {
     backgroundColor: '#4CAF50',
@@ -406,17 +483,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 5,
     flex: 1,
-  },
-  btnText: {
-    color: 'white',
-    fontSize: 15,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  btnTextSmall: {
-    color: 'white',
-    fontSize: 13,
-    fontWeight: 'bold',
   },
   rateText: {
     color: '#9c27b0',
