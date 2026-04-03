@@ -142,14 +142,21 @@ interface DataRow {
 }
 
 const COLUMNS = [
-  '保单\n年度', '客户\n年龄',
-  '身故总利益', '主险现价', '现价增长率', '当年分红现价', '累计分红现价', '演示生存总利益', '演示增长率', '预期生存总利益', '预期增长率', '预期单利'
+  { name: '保单\n年度', width: 50 },
+  { name: '客户\n年龄', width: 50 },
+  { name: '身故\n总利益', width: 75 },
+  { name: '主险\n现价', width: 70 },
+  { name: '现价\n增长率', width: 65 },
+  { name: '当年\n分红现价', width: 70 },
+  { name: '累计\n分红现价', width: 70 },
+  { name: '演示\n生存总利益', width: 75 },
+  { name: '演示\n增长率', width: 60 },
+  { name: '预期\n生存总利益', width: 75 },
+  { name: '预期\n增长率', width: 60 },
+  { name: '预期\n单利', width: 55 },
 ];
 
 const screenWidth = Dimensions.get('window').width;
-const COLS_COUNT = 12;
-const CELL_WIDTH = Math.floor((screenWidth - 20) / COLS_COUNT) + 8;
-const NARROW_CELL_WIDTH = Math.floor(CELL_WIDTH * 0.65);
 
 const ALL_AGES_F: number[] = INSURANCE_DB.getAvailableAges('F');
 const ALL_AGES_M: number[] = INSURANCE_DB.getAvailableAges('M');
@@ -527,24 +534,24 @@ export default function App() {
               <ScrollView showsVerticalScrollIndicator={false}>
                 <View style={styles.table}>
                   <View style={styles.headerRow}>
-                    {COLUMNS.map((col, idx) => (
-                      <Text key={idx} style={[styles.headerCell, (idx === 0 || idx === 1) && styles.headerCellNarrow]}>{col}</Text>
+                    {COLUMNS.map((col: any, idx: number) => (
+                      <Text key={idx} style={[styles.headerCell, { width: col.width }]}>{col.name}</Text>
                     ))}
                   </View>
                   {data.map((row, index) => (
                     <View key={row.policy_year} style={[styles.dataRow, index % 2 === 1 && styles.dataRowAlt]}>
-                      <Text style={[styles.dataCell, styles.narrowCell]}>{row.policy_year}</Text>
-                      <Text style={[styles.dataCell, styles.narrowCell]}>{row.age}</Text>
-                      <Text style={styles.dataCell}>{formatNumber(row.death_benefit)}</Text>
-                      <Text style={styles.dataCell}>{formatNumber(row.cash_value)}</Text>
-                      <Text style={styles.dataCell}>{formatRate(row.growth_rate)}</Text>
-                      <Text style={styles.dataCell}>{formatNumber(row.current_dividend_cash)}</Text>
-                      <Text style={styles.dataCell}>{formatNumber(row.accum_dividend_cash)}</Text>
-                      <Text style={styles.dataCell}>{formatNumber(row.demo_survival)}</Text>
-                      <Text style={[styles.dataCell, styles.highlight]}>{formatRate(row.demo_rate)}</Text>
-                      <Text style={styles.dataCell}>{formatNumber(row.expected_survival)}</Text>
-                      <Text style={styles.dataCell}>{formatRate(row.expected_rate)}</Text>
-                      <Text style={styles.dataCell}>{formatSimpleRate(row.expected_simple_rate)}</Text>
+                      <Text style={[styles.dataCell, { width: COLUMNS[0].width }]}>{row.policy_year}</Text>
+                      <Text style={[styles.dataCell, { width: COLUMNS[1].width }]}>{row.age}</Text>
+                      <Text style={[styles.dataCell, { width: COLUMNS[2].width }]}>{formatNumber(row.death_benefit)}</Text>
+                      <Text style={[styles.dataCell, { width: COLUMNS[3].width }]}>{formatNumber(row.cash_value)}</Text>
+                      <Text style={[styles.dataCell, { width: COLUMNS[4].width }]}>{formatRate(row.growth_rate)}</Text>
+                      <Text style={[styles.dataCell, { width: COLUMNS[5].width }]}>{formatNumber(row.current_dividend_cash)}</Text>
+                      <Text style={[styles.dataCell, { width: COLUMNS[6].width }]}>{formatNumber(row.accum_dividend_cash)}</Text>
+                      <Text style={[styles.dataCell, { width: COLUMNS[7].width }]}>{formatNumber(row.demo_survival)}</Text>
+                      <Text style={[styles.dataCell, styles.highlight, { width: COLUMNS[8].width }]}>{formatRate(row.demo_rate)}</Text>
+                      <Text style={[styles.dataCell, { width: COLUMNS[9].width }]}>{formatNumber(row.expected_survival)}</Text>
+                      <Text style={[styles.dataCell, { width: COLUMNS[10].width }]}>{formatRate(row.expected_rate)}</Text>
+                      <Text style={[styles.dataCell, { width: COLUMNS[11].width }]}>{formatSimpleRate(row.expected_simple_rate)}</Text>
                     </View>
                   ))}
                 </View>
@@ -833,14 +840,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a73e8',
   },
   headerCell: {
-    width: CELL_WIDTH,
-    height: 44,
     padding: 4,
     color: 'white',
     fontSize: 10,
     fontWeight: 'bold',
     textAlign: 'center',
     textAlignVertical: 'center',
+  },
+  headerCellNarrow: {
+    width: NARROW_CELL_WIDTH,
+  },
+  dataRow: {
+    flexDirection: 'row',
+    height: 28,
+    backgroundColor: 'white',
   },
   dataRow: {
     flexDirection: 'row',
@@ -851,8 +864,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#e8f0fe',
   },
   dataCell: {
-    width: CELL_WIDTH,
-    height: 26,
+    height: 28,
     padding: 4,
     fontSize: 10,
     textAlign: 'center',
