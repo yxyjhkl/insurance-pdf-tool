@@ -184,47 +184,56 @@ export default function App() {
   };
 
   const interpolateAgeData = (targetAge: number, genderCode: string, premium: number, dividendRate: number): DataRow[] | null => {
-    const ages = getAvailableAges();
-    if (!ages || ages.length < 2) return null;
+    try {
+      const ages = getAvailableAges();
+      if (!ages || ages.length < 2) return null;
 
-    const sortedAges = [...ages].sort((a, b) => a - b);
-    
-    let lowerAge = sortedAges[0];
-    let upperAge = sortedAges[sortedAges.length - 1];
-    for (let i = 0; i < sortedAges.length - 1; i++) {
-      if (sortedAges[i] <= targetAge && targetAge <= sortedAges[i + 1]) {
-        lowerAge = sortedAges[i];
-        upperAge = sortedAges[i + 1];
-        break;
-      }
-    }
-
-    const lowerData = INSURANCE_DB.getInsuranceData(lowerAge, genderCode, premium, dividendRate);
-    const upperData = INSURANCE_DB.getInsuranceData(upperAge, genderCode, premium, dividendRate);
-
-    if (!lowerData || !upperData) return null;
-
-    if (targetAge === lowerAge) return lowerData;
-    if (targetAge === upperAge) return upperData;
-
-    const ratio = (targetAge - lowerAge) / (upperAge - lowerAge);
-    
-    return lowerData.map((row, idx) => {
-      const upperRow = upperData[idx];
-      const result = { ...row };
+      const sortedAges = [...ages].sort((a, b) => a - b);
       
-      const keys = ['premium', 'total_premium', 'death_benefit', 'cash_value', 'current_dividend_cash', 'accum_dividend_cash', 'demo_survival', 'expected_survival'];
-      for (const key of keys) {
-        const lowerVal = (row as any)[key];
-        const upperVal = (upperRow as any)[key];
-        if (typeof lowerVal === 'number' && typeof upperVal === 'number') {
-          (result as any)[key] = Math.round(lowerVal + (upperVal - lowerVal) * ratio);
+      let lowerAge = sortedAges[0];
+      let upperAge = sortedAges[sortedAges.length - 1];
+      for (let i = 0; i < sortedAges.length - 1; i++) {
+        if (sortedAges[i] <= targetAge && targetAge <= sortedAges[i + 1]) {
+          lowerAge = sortedAges[i];
+          upperAge = sortedAges[i + 1];
+          break;
         }
       }
+
+      const lowerData = INSURANCE_DB.getInsuranceData(lowerAge, genderCode, premium, dividendRate);
+      const upperData = INSURANCE_DB.getInsuranceData(upperAge, genderCode, premium, dividendRate);
+
+      if (!lowerData || !upperData || !lowerData.length || !upperData.length) {
+        return null;
+      }
+
+      if (targetAge === lowerAge) return lowerData;
+      if (targetAge === upperAge) return upperData;
+
+      const ratio = (targetAge - lowerAge) / (upperAge - lowerAge);
+      if (isNaN(ratio) || !isFinite(ratio)) return lowerData;
       
-      result.age = targetAge + idx;
-      return result;
-    });
+      return lowerData.map((row, idx) => {
+        if (!upperData[idx]) return row;
+        const upperRow = upperData[idx];
+        const result: any = { ...row };
+        
+        const keys = ['premium', 'total_premium', 'death_benefit', 'cash_value', 'current_dividend_cash', 'accum_dividend_cash', 'demo_survival', 'expected_survival'];
+        for (const key of keys) {
+          const lowerVal = row[key as keyof DataRow];
+          const upperVal = upperRow[key as keyof DataRow];
+          if (typeof lowerVal === 'number' && typeof upperVal === 'number' && isFinite(lowerVal) && isFinite(upperVal)) {
+            result[key] = Math.round(lowerVal + (upperVal - lowerVal) * ratio);
+          }
+        }
+        
+        result.age = targetAge + idx;
+        return result;
+      });
+    } catch (error) {
+      console.error('Interpolate error:', error);
+      return null;
+    }
   };
 
   const formatNumber = (num: number | null | undefined): string => {
@@ -375,9 +384,20 @@ export default function App() {
 
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>投保年龄</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.ageScroll}>
+            <View style={styles.ageGridContainer}>
               <View style={styles.ageRow}>
-                {getFilteredAges().map(a => (
+                {getFilteredAges().slice(0, 5).map(a => (
+                  <TouchableOpacity
+                    key={a}
+                    style={[styles.ageBtn, age === a && styles.ageBtnActive]}
+                    onPress={() => setAge(a)}
+                  >
+                    <Text style={[styles.ageText, age === a && styles.ageTextActive]}>{getYearText(a)}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <View style={styles.ageRow}>
+                {getFilteredAges().slice(5).map(a => (
                   <TouchableOpacity
                     key={a}
                     style={[styles.ageBtn, age === a && styles.ageBtnActive]}
@@ -396,7 +416,7 @@ export default function App() {
                   <Text style={[styles.ageText, !getFilteredAges().includes(age) && styles.ageTextActive]}>自定义</Text>
                 </TouchableOpacity>
               </View>
-            </ScrollView>
+            </View>
           </View>
 
           <Modal visible={showAgePicker} transparent animationType="slide">
@@ -506,17 +526,26 @@ export default function App() {
               <Text style={styles.loadingText}>正在计算...</Text>
             </View>
           ) : data.length > 0 ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <ScrollView showsVerticalScrollIndicator={false}>
-                <View style={styles.table}>
+            <View style={styles.tableContainer}>
+              <View style={styles.frozenColumn}>
+                <View style={styles.headerCell}>
+                  <Text style={styles.headerCellText}>保单\n年度</Text>
+                </View>
+                {data.map((row, index) => (
+                  <View key={row.policy_year} style={[styles.frozenCell, index % 2 === 1 && styles.dataRowAlt]}>
+                    <Text style={styles.frozenCellText}>{row.policy_year}</Text>
+                  </View>
+                ))}
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={styles.scrollingTable}>
                   <View style={styles.headerRow}>
-                    {COLUMNS.map((col, idx) => (
+                    {COLUMNS.slice(1).map((col, idx) => (
                       <Text key={idx} style={styles.headerCell}>{col}</Text>
                     ))}
                   </View>
                   {data.map((row, index) => (
                     <View key={row.policy_year} style={[styles.dataRow, index % 2 === 1 && styles.dataRowAlt]}>
-                      <Text style={[styles.dataCell, styles.narrowCell]}>{row.policy_year}</Text>
                       <Text style={[styles.dataCell, styles.narrowCell]}>{row.age}</Text>
                       <Text style={styles.dataCell}>{formatNumber(row.death_benefit)}</Text>
                       <Text style={styles.dataCell}>{formatNumber(row.cash_value)}</Text>
@@ -532,7 +561,7 @@ export default function App() {
                   ))}
                 </View>
               </ScrollView>
-            </ScrollView>
+            </View>
           ) : null}
         </>
       )}
@@ -636,6 +665,10 @@ const styles = StyleSheet.create({
   },
   ageScroll: {
     flexGrow: 0,
+  },
+  ageGridContainer: {
+    flexDirection: 'column',
+    gap: 8,
   },
   ageRow: {
     flexDirection: 'row',
@@ -803,6 +836,37 @@ const styles = StyleSheet.create({
   },
   table: {
     padding: 10,
+  },
+  tableContainer: {
+    flexDirection: 'row',
+  },
+  frozenColumn: {
+    backgroundColor: '#1a73e8',
+    width: NARROW_CELL_WIDTH + 4,
+  },
+  frozenCell: {
+    width: NARROW_CELL_WIDTH + 4,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderRightWidth: 1,
+    borderColor: '#ddd',
+  },
+  frozenCellText: {
+    fontSize: 10,
+    color: '#333',
+    textAlign: 'center',
+  },
+  headerCellText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  scrollingTable: {
+    backgroundColor: '#1a73e8',
   },
   headerRow: {
     flexDirection: 'row',
