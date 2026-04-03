@@ -157,6 +157,8 @@ const COLUMNS = [
 ];
 
 const screenWidth = Dimensions.get('window').width;
+const CELL_WIDTH = 70;
+const NARROW_CELL_WIDTH = 50;
 
 const ALL_AGES_F: number[] = INSURANCE_DB.getAvailableAges('F');
 const ALL_AGES_M: number[] = INSURANCE_DB.getAvailableAges('M');
