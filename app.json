@@ -4,11 +4,11 @@
     "slug": "jinzun-overseas",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/icon.jpg",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/splash-icon.jpg",
       "resizeMode": "contain",
       "backgroundColor": "#D4AF37"
     },
@@ -19,7 +19,7 @@
     "android": {
       "package": "com.jinzun.overseas",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/adaptive-icon.jpg",
         "backgroundColor": "#D4AF37"
       }
     },
@@ -27,7 +27,13 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-document-picker"
-    ]
+      "expo-document-picker",
+      "react-native-view-shot"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "9cfe6c02-20e1-4df1-bfba-1b0487262070"
+      }
+    }
   }
 }
