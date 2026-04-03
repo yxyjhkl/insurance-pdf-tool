@@ -70,7 +70,7 @@ function getInsuranceData(age, gender, premium, dividendRate = 1.0) {
       current_dividend_cash: Math.round(currentDividendCash),
       accum_dividend_cash: Math.round(accumDividendCash),
       demo_survival: Math.round(demo),
-      demo_rate: row.demo_rate ? row.demo_rate / 100 : null,
+      demo_rate: row.demo_rate ? row.demo_rate : null,
       expected_survival: Math.round(expectedSurvival),
       expected_rate: expectedRate,
       expected_simple_rate: expectedSimpleRate,
