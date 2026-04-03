@@ -168,6 +168,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [showTable, setShowTable] = useState(false);
   const [showAgePicker, setShowAgePicker] = useState(false);
+  const [tempAge, setTempAge] = useState('30');
   const getMaxAge = () => gender === 'M' ? 62 : 65;
 
   const getAvailableAges = () => {
@@ -193,8 +194,8 @@ export default function App() {
       }
     }
 
-    const lowerData = INSURANCE_DB.getInsuranceData(lowerAge, gender, premium, dividendRate);
-    const upperData = INSURANCE_DB.getInsuranceData(upperAge, gender, premium, dividendRate);
+    const lowerData = INSURANCE_DB.getInsuranceData(lowerAge, genderCode, premium, dividendRate);
+    const upperData = INSURANCE_DB.getInsuranceData(upperAge, genderCode, premium, dividendRate);
 
     if (!lowerData || !upperData) return null;
 
