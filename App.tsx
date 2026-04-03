@@ -152,7 +152,8 @@ const COLUMNS = [
 const screenWidth = Dimensions.get('window').width;
 const CELL_WIDTH = Math.floor((screenWidth - 20) / 6);
 
-const AVAILABLE_AGES = INSURANCE_DB.getAvailableAges('F');
+const ALL_AGES_F = INSURANCE_DB.getAvailableAges('F');
+const ALL_AGES_M = INSURANCE_DB.getAvailableAges('M');
 const GENDERS = [
   { label: '男性', value: 'M' },
   { label: '女性', value: 'F' },
@@ -169,13 +170,17 @@ export default function App() {
   const [showAgePicker, setShowAgePicker] = useState(false);
   const getMaxAge = () => gender === 'M' ? 62 : 65;
 
-  const getFilteredAges = () => {
-    const maxAge = getMaxAge();
-    return AVAILABLE_AGES.filter(a => a <= maxAge);
+  const getAvailableAges = () => {
+    return gender === 'M' ? ALL_AGES_M : ALL_AGES_F;
   };
 
-  const interpolateAgeData = (targetAge: number, gender: string, premium: number, dividendRate: number) => {
-    const ages = AVAILABLE_AGES.sort((a, b) => a - b);
+  const getFilteredAges = () => {
+    const maxAge = getMaxAge();
+    return getAvailableAges().filter(a => a <= maxAge);
+  };
+
+  const interpolateAgeData = (targetAge: number, genderCode: string, premium: number, dividendRate: number) => {
+    const ages = getAvailableAges().sort((a: number, b: number) => a - b);
     if (ages.length < 2) return null;
 
     let lowerAge = ages[0];
@@ -245,7 +250,7 @@ export default function App() {
     setTimeout(() => {
       let result: DataRow[] | null = null;
       
-      if (AVAILABLE_AGES.includes(age)) {
+      if (getAvailableAges().includes(age)) {
         result = INSURANCE_DB.getInsuranceData(age, genderCode, premiumNum, rate);
       } else {
         result = interpolateAgeData(age, genderCode, premiumNum, rate);
@@ -267,7 +272,7 @@ export default function App() {
     const premiumNum = parseFloat(premium);
     if (!isNaN(premiumNum) && premiumNum >= 25000) {
       let result: DataRow[] | null = null;
-      if (AVAILABLE_AGES.includes(age)) {
+      if (getAvailableAges().includes(age)) {
         result = INSURANCE_DB.getInsuranceData(age, gender, premiumNum, newRate);
       } else {
         result = interpolateAgeData(age, gender, premiumNum, newRate);
